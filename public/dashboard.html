@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MGS OS — Client Delivery Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+--bg-primary:#ffffff;--bg-secondary:#f7f6f3;--bg-tertiary:#f0efe9;
+--text-primary:#1a1a18;--text-secondary:#5c5c58;--text-tertiary:#9c9a92;
+--border:rgba(0,0,0,0.1);--border-md:rgba(0,0,0,0.18);
+--radius-md:8px;--radius-lg:12px;
+--green-bg:#EAF3DE;--green-text:#27500A;--green-bar:#639922;
+--blue-bg:#E6F1FB;--blue-text:#0C447C;--blue-bar:#185FA5;
+--amber-bg:#FAEEDA;--amber-text:#633806;--amber-bar:#EF9F27;
+--red-bg:#FCEBEB;--red-text:#791F1F;--red-bar:#E24B4A;
+--gray-bg:#F1EFE8;--gray-text:#444441;
+--teal-bg:#E1F5EE;--teal-text:#085041;
+--purple-bg:#EEEDFE;--purple-text:#3C3489;
+--pink-bg:#FBEAF0;--pink-text:#72243E;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg-tertiary);color:var(--text-primary);font-size:14px}
+.os{display:flex;height:100vh}
+.sb{width:215px;flex-shrink:0;background:var(--bg-primary);border-right:0.5px solid var(--border);display:flex;flex-direction:column}
+.sb-top{padding:14px 16px 12px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.sb-logo{font-size:13px;font-weight:600;letter-spacing:.04em}
+.sb-sub{font-size:10px;color:var(--text-tertiary);margin-top:2px}
+.sb-logout{font-size:10px;color:var(--text-tertiary);cursor:pointer;padding:3px 6px;border-radius:5px;border:0.5px solid var(--border);text-decoration:none}
+.sb-logout:hover{background:var(--bg-secondary)}
+.sb-sec{padding:10px 10px 0;overflow-y:auto;flex:1}
+.sb-lbl{font-size:10px;font-weight:600;color:var(--text-tertiary);letter-spacing:.08em;text-transform:uppercase;padding:4px 6px 6px}
+.cr{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:var(--radius-md);cursor:pointer;transition:background .12s;margin-bottom:1px}
+.cr:hover,.cr.on{background:var(--bg-secondary)}
+.av{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0}
+.cr-r{flex:1;min-width:0}
+.cr-top{display:flex;align-items:center;justify-content:space-between}
+.cr-name{font-size:12px;font-weight:500}
+.cr-score{font-size:10px;font-weight:500;padding:1px 5px;border-radius:6px}
+.cr-phase{font-size:10px;color:var(--text-tertiary);margin-top:1px}
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.ch{padding:12px 18px 0;background:var(--bg-primary);border-bottom:0.5px solid var(--border);flex-shrink:0}
+.ch-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.ch-av{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.ch-name{font-size:15px;font-weight:600}
+.ch-sub{font-size:11px;color:var(--text-tertiary);margin-top:1px}
+.ch-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.ch-badge{font-size:10px;padding:3px 9px;border-radius:20px;font-weight:500}
+.ch-ds{font-size:11px;font-weight:500;padding:3px 9px;border-radius:20px}
+.tabs{display:flex}
+.tab{font-size:11px;padding:10px 13px;cursor:pointer;color:var(--text-secondary);border-bottom:2px solid transparent;transition:all .12s;white-space:nowrap;display:flex;align-items:center;gap:4px}
+.tab:hover{color:var(--text-primary)}
+.tab.on{color:var(--text-primary);font-weight:600;border-bottom-color:var(--text-primary)}
+.tab i{font-size:12px}
+.page{flex:1;overflow-y:auto;padding:14px 18px}
+.view{display:none}.view.on{display:block}
+.g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.g21{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px;margin-bottom:12px}
+.g12{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px;margin-bottom:12px}
+.sc{background:var(--bg-secondary);border-radius:var(--radius-md);padding:11px}
+.sl{font-size:10px;color:var(--text-tertiary);margin-bottom:3px}
+.sv{font-size:20px;font-weight:600}
+.ssub{font-size:10px;color:var(--text-tertiary);margin-top:2px}
+.card{background:var(--bg-primary);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:13px}
+.ct{font-size:12px;font-weight:600;margin-bottom:10px}
+.pbt{height:5px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;margin-bottom:2px}
+.pbf{height:100%;border-radius:3px}
+.pl{display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-bottom:4px}
+.pw{margin-bottom:9px}
+.trow{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:0.5px solid var(--border)}
+.trow:last-child{border-bottom:none}
+.ck{width:15px;height:15px;border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--border-md)}
+.ck.done{background:#639922;border-color:#639922}
+.ck.done::after{content:'';display:block;width:8px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+.ck.prog{background:#E6F1FB;border-color:#185FA5}
+.ck.over{background:#FCEBEB;border-color:#E24B4A}
+.tn{font-size:11px;color:var(--text-secondary);flex:1}
+.tn.done{text-decoration:line-through;color:var(--text-tertiary)}
+.tn.over{color:#A32D2D;font-weight:500}
+.tdate{font-size:10px;color:var(--text-tertiary);flex-shrink:0}
+.tdate.over{color:#A32D2D}
+.tbadge{font-size:10px;padding:2px 6px;border-radius:8px;font-weight:500;white-space:nowrap;flex-shrink:0}
+.mrow{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border)}
+.mrow:last-child{border-bottom:none}
+.mn{font-size:11px;color:var(--text-secondary)}
+.mv{font-size:12px;font-weight:500}
+.mtag{font-size:10px;padding:2px 6px;border-radius:8px;margin-left:5px}
+.ibox{border-radius:var(--radius-md);padding:9px;margin-bottom:7px;border:0.5px solid}
+.ibox:last-child{margin-bottom:0}
+.ibt{font-size:11px;font-weight:600;margin-bottom:3px;display:flex;align-items:center;gap:4px}
+.ibb{font-size:11px;line-height:1.5}
+.hs{display:flex;align-items:flex-start;gap:8px;padding:7px 8px;border-radius:var(--radius-md);margin-bottom:2px;background:var(--bg-secondary)}
+.hn{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0;margin-top:1px}
+.hname{font-size:11px;font-weight:500}
+.hdesc{font-size:10px;color:var(--text-tertiary);margin-top:1px;line-height:1.4}
+.hconn{width:1px;height:5px;background:var(--border-md);margin:0 0 0 17px}
+.ab{display:flex;align-items:center;gap:9px;padding:5px 0;border-bottom:0.5px solid var(--border)}
+.ab:last-child{border-bottom:none}
+.ab-label{font-size:11px;color:var(--text-secondary);width:120px;flex-shrink:0}
+.ab-track{flex:1;height:4px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden}
+.ab-fill{height:100%;border-radius:3px}
+.ab-val{font-size:11px;font-weight:500;width:38px;text-align:right;flex-shrink:0}
+.sec-hdr{font-size:10px;font-weight:600;color:var(--text-tertiary);letter-spacing:.08em;text-transform:uppercase;margin:14px 0 8px}
+.sec-hdr:first-child{margin-top:0}
+.score-box{display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-secondary);border-radius:var(--radius-md);margin-bottom:8px}
+.score-num{font-size:22px;font-weight:600;min-width:50px}
+.score-label{font-size:11px;color:var(--text-secondary)}
+.score-sub{font-size:10px;color:var(--text-tertiary);margin-top:2px}
+.metric-score{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--border)}
+.metric-score:last-child{border-bottom:none}
+.ms-name{font-size:11px;color:var(--text-secondary)}
+.ms-dots{display:flex;gap:3px}
+.ms-dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--border-md)}
+.ms-dot.filled{border:none}
+.ms-val{font-size:11px;font-weight:500;width:30px;text-align:right}
+.reminder-box{background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:var(--radius-md);padding:10px;display:flex;align-items:flex-start;gap:8px}
+.rb-icon{color:#185FA5;font-size:16px;flex-shrink:0;margin-top:1px}
+.rb-text{font-size:11px;color:#0C447C;line-height:1.5}
+.overdue-banner{background:#FCEBEB;border:0.5px solid #F7C1C1;border-radius:var(--radius-md);padding:9px 12px;display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.overdue-banner.ok{background:#EAF3DE;border-color:#C0DD97}
+.overdue-banner.ok .ob-icon{color:#27500A}
+.overdue-banner.ok .ob-text{color:#27500A}
+.ob-icon{color:#A32D2D;font-size:15px;flex-shrink:0}
+.ob-text{font-size:11px;color:#791F1F;font-weight:500}
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--text-tertiary);font-size:12px}
+.empty-state{padding:30px;text-align:center;color:var(--text-tertiary);font-size:12px}
+</style>
+</head>
+<body>
+<div class="os">
+<div class="sb">
+  <div class="sb-top">
+    <div>
+      <div class="sb-logo">MGS OS</div>
+      <div class="sb-sub">Client delivery dashboard</div>
+    </div>
+    <form method="POST" action="/logout" style="display:inline">
+      <button type="submit" class="sb-logout" style="background:none;border:0.5px solid var(--border);cursor:pointer;font-family:inherit">Sign out</button>
+    </form>
+  </div>
+  <div class="sb-sec">
+    <div class="sb-lbl">Active clients</div>
+    <div id="client-list"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+
+<div class="main">
+<div class="ch">
+  <div class="ch-top">
+    <div class="ch-av" id="ch-av"></div>
+    <div><div class="ch-name" id="ch-name"></div><div class="ch-sub" id="ch-sub"></div></div>
+    <div class="ch-right">
+      <span class="ch-badge" id="ch-badge"></span>
+      <span class="ch-ds" id="ch-ds"></span>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab on" data-tab="overview"><i class="ti ti-layout-dashboard"></i>Overview</div>
+    <div class="tab" data-tab="strategy"><i class="ti ti-target"></i>Strategy</div>
+    <div class="tab" data-tab="sprints"><i class="ti ti-timeline"></i>Sprints</div>
+    <div class="tab" data-tab="delivery"><i class="ti ti-checks"></i>Delivery</div>
+    <div class="tab" data-tab="progress"><i class="ti ti-chart-bar"></i>Progress</div>
+    <div class="tab" data-tab="brand"><i class="ti ti-shield-check"></i>Brand</div>
+  </div>
+</div>
+
+<div class="page" id="page-content">
+  <div class="loading">Select a client to get started</div>
+</div>
+</div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let currentClient = null;
+let currentTab = 'overview';
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+async function boot() {
+  const clients = await api('/api/clients');
+  renderSidebar(clients);
+  if (clients.length > 0) loadClient(clients[0].key);
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function api(url, method='GET', body=null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function renderSidebar(clients) {
+  const list = document.getElementById('client-list');
+  list.innerHTML = clients.map(c => `
+    <div class="cr${currentClient===c.key?' on':''}" onclick="loadClient('${c.key}')" id="cr-${c.key}">
+      <div class="av" style="background:${c.avatar_bg};color:${c.avatar_col}">${c.avatar}</div>
+      <div class="cr-r">
+        <div class="cr-top">
+          <span class="cr-name">${esc(c.name)}</span>
+          <span class="cr-score" style="background:${c.score_bg};color:${c.score_col}">${esc(c.score)}</span>
+        </div>
+        <div class="cr-phase">${esc(c.phase)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Load client ───────────────────────────────────────────────────────────────
+async function loadClient(key) {
+  currentClient = key;
+  document.querySelectorAll('.cr').forEach(r => r.classList.remove('on'));
+  const cr = document.getElementById('cr-' + key);
+  if (cr) cr.classList.add('on');
+
+  const c = await api('/api/clients/' + key);
+  const av = document.getElementById('ch-av');
+  av.textContent = c.avatar;
+  av.style.background = c.avatar_bg;
+  av.style.color = c.avatar_col;
+  document.getElementById('ch-name').textContent = c.name;
+  document.getElementById('ch-sub').textContent = c.sub || '';
+  const b = document.getElementById('ch-badge');
+  b.textContent = c.badge;
+  b.style.background = c.badge_bg;
+  b.style.color = c.badge_col;
+  const ds = document.getElementById('ch-ds');
+  ds.textContent = 'Delivery score: ' + c.score;
+  ds.style.background = c.score_bg;
+  ds.style.color = c.score_col;
+
+  // Reset to overview tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  document.querySelector('[data-tab="overview"]').classList.add('on');
+  currentTab = 'overview';
+  await loadTab('overview');
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', async () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+    t.classList.add('on');
+    currentTab = t.dataset.tab;
+    if (currentClient) await loadTab(currentTab);
+  });
+});
+
+async function loadTab(tab) {
+  const page = document.getElementById('page-content');
+  page.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const data = await api(`/api/clients/${currentClient}/tabs/${tab}`);
+    page.innerHTML = renderTab(tab, data);
+  } catch(e) {
+    page.innerHTML = `<div class="empty-state">No data yet for this tab.</div>`;
+  }
+}
+
+// ── Renderers ─────────────────────────────────────────────────────────────────
+function renderTab(tab, d) {
+  switch(tab) {
+    case 'overview':  return renderOverview(d);
+    case 'strategy':  return renderStrategy(d);
+    case 'sprints':   return renderSprints(d);
+    case 'delivery':  return renderDelivery(d);
+    case 'progress':  return renderProgress(d);
+    case 'brand':     return renderBrand(d);
+    default: return '<div class="empty-state">Coming soon.</div>';
+  }
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function ckClass(status) {
+  if (status==='done') return 'ck done';
+  if (status==='prog') return 'ck prog';
+  if (status==='over') return 'ck over';
+  return 'ck';
+}
+
+function taskRow(t) {
+  const cls = t.done||t.status==='done' ? 'done' : (t.status==='over'?'over':'');
+  const badge = t.badge ? `<span class="tbadge" style="background:${t.badge_bg};color:${t.badge_col}">${esc(t.badge)}</span>` : '';
+  const date = t.date ? `<span class="tdate">${esc(t.date)}</span>` : '';
+  return `<div class="trow">
+    <div class="${ckClass(t.done?'done':t.status)}"></div>
+    <span class="tn ${cls}">${esc(t.text)}</span>
+    ${badge}${date}
+  </div>`;
+}
+
+function progressBar(label, pct, color, valHtml) {
+  return `<div class="pw">
+    <div class="pl"><span>${esc(label)}</span>${valHtml}</div>
+    <div class="pbt"><div class="pbf" style="width:${pct}%;background:${color}"></div></div>
+  </div>`;
+}
+
+// Overview
+function renderOverview(d) {
+  if (!d || !d.stats) return '<div class="empty-state">No overview data yet.</div>';
+  const stats = d.stats.map(s => `
+    <div class="sc">
+      <div class="sl">${esc(s.label)}</div>
+      <div class="sv" ${s.color?`style="color:${s.color}"`:''}>${esc(s.value)}</div>
+      <div class="ssub">${esc(s.sub||'')}</div>
+    </div>`).join('');
+
+  const tasks = (d.summary?.tasks||[]).map(t => taskRow(t)).join('');
+
+  const actionColors = { green: ['#EAF3DE','#C0DD97','#27500A','#3B6D11'], blue: ['#E6F1FB','#B5D4F4','#0C447C','#185FA5'] };
+  const actions = (d.actions||[]).map(a => {
+    const [bg,bc,tc,bc2] = actionColors[a.type]||actionColors.blue;
+    return `<div class="ibox" style="background:${bg};border-color:${bc}">
+      <div class="ibt" style="color:${tc}"><i class="ti ${a.icon}"></i>${esc(a.title)}</div>
+      <div class="ibb" style="color:${bc2}">${esc(a.body)}</div>
+    </div>`;
+  }).join('');
+
+  const topContent = (d.top_content||[]).map(r => `
+    <div class="mrow">
+      <span class="mn">${esc(r.name)}</span>
+      <span class="mv">${esc(r.value)}<span class="mtag" style="background:${r.tag_bg};color:${r.tag_col}">${esc(r.tag)}</span></span>
+    </div>`).join('');
+
+  return `
+    <div class="g4">${stats}</div>
+    <div class="g21">
+      <div class="card">
+        <div class="ct">${esc(d.summary?.title||'Summary')}</div>
+        <div style="font-size:11px;color:#5c5c58;line-height:1.6;margin-bottom:10px">${esc(d.summary?.body||'')}</div>
+        ${tasks}
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="ct">What needs to happen next</div>
+          ${actions}
+        </div>
+        <div class="card">
+          <div class="ct">Top performing content</div>
+          ${topContent}
+        </div>
+      </div>
+    </div>`;
+}
+
+// Strategy
+function renderStrategy(d) {
+  if (!d || !d.hierarchy) return '<div class="empty-state">No strategy data yet.</div>';
+  const hier = d.hierarchy.map((h,i) => `
+    ${i>0?'<div class="hconn"></div>':''}
+    <div class="hs" ${h.border?'style="border:0.5px solid var(--border-md)"':''}>
+      <div class="hn" style="background:${h.bg};color:${h.col}">${h.num}</div>
+      <div><div class="hname">${esc(h.name)}</div><div class="hdesc">${esc(h.desc)}</div></div>
+    </div>`).join('');
+
+  const ws = (d.workstreams||[]).map(w =>
+    progressBar(w.label, w.pct, w.color, `<span style="font-weight:500;color:${w.val_col}">${esc(w.val)}</span>`)
+  ).join('');
+
+  const percs = (d.perceptions||[]).map((p,i) =>
+    progressBar(p.label, p.pct, p.color, `<span style="font-weight:500;color:${p.val_col}">${esc(p.val)}</span>`)
+  ).join('');
+
+  return `
+    <div class="g12">
+      <div class="card"><div class="ct">Strategic hierarchy</div>${hier}</div>
+      <div>
+        <div class="card" style="margin-bottom:10px"><div class="ct">Five strategic workstreams</div>${ws}</div>
+        <div class="card"><div class="ct">Perception targets</div>${percs}</div>
+      </div>
+    </div>`;
+}
+
+// Sprints
+function renderSprints(d) {
+  if (!d || !d.sprints) return '<div class="empty-state">No sprint data yet.</div>';
+  return d.sprints.map(s => {
+    const tasks = s.tasks.map(t => taskRow(t)).join('');
+    return `
+      <div style="border:0.5px solid ${s.border_col};border-radius:var(--radius-md);padding:13px;margin-bottom:10px${s.faded?';opacity:.6':''}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+          <div>
+            <div style="font-size:13px;font-weight:600">${esc(s.title)}</div>
+            <div style="font-size:10px;color:#9c9a92;margin-top:2px">${esc(s.period)}</div>
+          </div>
+          <span style="font-size:10px;padding:2px 8px;border-radius:8px;background:${s.status_bg};color:${s.status_col};font-weight:500">${esc(s.status)}</span>
+        </div>
+        <div class="pbt" style="margin-bottom:9px"><div class="pbf" style="width:${s.bar_pct}%;background:${s.bar_col}"></div></div>
+        <div style="font-size:11px;color:#5c5c58;margin-bottom:${tasks?'8px':'0'}">${esc(s.body)}</div>
+        ${tasks}
+      </div>`;
+  }).join('');
+}
+
+// Delivery
+function renderDelivery(d) {
+  if (!d) return '<div class="empty-state">No delivery data yet.</div>';
+  const overdueCount = d.overdue_count||0;
+  const bannerClass = overdueCount===0 ? 'overdue-banner ok' : 'overdue-banner';
+  const bannerIcon = overdueCount===0 ? 'ti-circle-check' : 'ti-alert-triangle';
+  const bannerText = overdueCount===0 ? '0 overdue tasks · All delivery on track' : `${overdueCount} overdue task${overdueCount>1?'s':''} — action required`;
+
+  const weeks = (d.weeks||[]).map(w => `
+    <div>
+      <div style="font-size:11px;font-weight:600;margin-bottom:8px;padding-bottom:6px;border-bottom:0.5px solid rgba(0,0,0,0.1)">${esc(w.label)}</div>
+      ${w.tasks.map(t => taskRow(t)).join('')}
+    </div>`).join('');
+
+  const website = (d.website||[]).map(t => taskRow(t)).join('');
+  const brand = (d.brand||[]).map(t => taskRow(t)).join('');
+
+  return `
+    <div class="${bannerClass}">
+      <i class="ti ${bannerIcon} ob-icon"></i>
+      <span class="ob-text">${bannerText}</span>
+    </div>
+    <div class="sec-hdr">Content calendar</div>
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${weeks}</div>
+    </div>
+    ${website ? `<div class="sec-hdr">Website</div><div class="card" style="margin-bottom:12px">${website}</div>` : ''}
+    ${brand ? `<div class="sec-hdr">Brand</div><div class="card">${brand}</div>` : ''}`;
+}
+
+// Progress
+function renderProgress(d) {
+  if (!d || !d.objectives) return '<div class="empty-state">No progress data yet.</div>';
+  const objectives = (d.objectives||[]).map(o =>
+    `<div class="pw" style="margin-bottom:14px">
+      <div class="pl"><span style="font-weight:600">${esc(o.label)}</span><span style="font-weight:500;color:${o.color}">${o.pct}%</span></div>
+      <div style="font-size:10px;color:#9c9a92;margin-bottom:5px">${esc(o.sub)}</div>
+      <div class="pbt"><div class="pbf" style="width:${o.pct}%;background:${o.color}"></div></div>
+    </div>`
+  ).join('');
+
+  const percs = (d.perceptions||[]).map(p =>
+    progressBar(p.label, p.pct, p.color, `<span style="color:${p.color}">${p.pct}%</span>`)
+  ).join('');
+
+  const metrics = (d.metrics||[]).map(m => `
+    <div class="mrow">
+      <span class="mn">${esc(m.label)}</span>
+      <div>
+        <span class="mv">${esc(m.value)}</span>
+        ${m.tag?`<span class="mtag" style="background:${m.tag_bg};color:${m.tag_col}">${esc(m.tag)}</span>`:''}
+      </div>
+    </div>`).join('');
+
+  const geo = (d.geography||[]).map(g => `
+    <div class="ab">
+      <span class="ab-label">${esc(g.label)}</span>
+      <div class="ab-track"><div class="ab-fill" style="width:${g.pct}%;background:${g.color}"></div></div>
+      <span class="ab-val">${esc(g.val)}</span>
+    </div>`).join('');
+
+  return `
+    <div class="g2">
+      <div class="card">
+        <div class="ct">Objective &amp; perception progress</div>
+        ${objectives}
+        <div style="border-top:0.5px solid rgba(0,0,0,0.1);padding-top:10px">${percs}</div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="ct">Planable metrics — 90 days</div>${metrics}
+        </div>
+        <div class="card">
+          <div class="ct">Audience — geography</div>${geo}
+        </div>
+      </div>
+    </div>`;
+}
+
+// Brand
+function renderBrand(d) {
+  if (!d || !d.overall) return '<div class="empty-state">No brand data yet.</div>';
+  const sections = (d.sections||[]).map(s => `
+    <div style="padding:9px;background:${s.bg};border-radius:var(--radius-md);text-align:center">
+      <div style="font-size:15px;font-weight:600;color:${s.col}">${s.score}/${s.max}</div>
+      <div style="font-size:10px;color:#5F5E5A;margin-top:2px">${esc(s.label)}</div>
+    </div>`).join('');
+
+  const metricBlocks = (d.metrics||[]).map(block => {
+    const items = block.items.map(item => {
+      const dots = Array.from({length:5},(_,i) =>
+        `<div class="ms-dot${i<item.score?' filled':''}" ${i<item.score?`style="background:${item.col}"`:''} ></div>`
+      ).join('');
+      return `<div class="metric-score">
+        <span class="ms-name">${esc(item.name)}</span>
+        <div class="ms-dots">${dots}</div>
+        <span class="ms-val">${item.score}/5</span>
+      </div>`;
+    }).join('');
+    return `<div style="font-size:11px;font-weight:600;margin-bottom:6px;margin-top:12px">${esc(block.section)}</div>${items}`;
+  }).join('');
+
+  const recs = (d.recommendations||[]).map((r,i) => `
+    <div style="padding:9px;background:#f7f6f3;border-radius:var(--radius-md);margin-bottom:7px">
+      <div style="font-size:11px;font-weight:600;margin-bottom:3px">${i+1}. ${esc(r.title)}</div>
+      <div style="font-size:11px;color:#5c5c58;line-height:1.5">${esc(r.body)}</div>
+    </div>`).join('');
+
+  return `
+    <div class="g2">
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="ct">Digital credibility scorecard${d.scorecard_client?' — '+esc(d.scorecard_client):''}</div>
+          <div style="font-size:10px;color:#9c9a92;margin-bottom:10px">Completed ${esc(d.scorecard_date||'')}</div>
+          <div class="score-box">
+            <div class="score-num" style="color:${d.overall_col}">${d.overall}</div>
+            <div>
+              <div class="score-label" style="font-weight:600">Overall score — ${d.overall}/${d.overall_max}</div>
+              <div class="score-sub">${esc(d.overall_label)}</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px">${sections}</div>
+          ${metricBlocks}
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="ct">Top 3 MGS recommendations</div>
+          ${recs}
+        </div>
+        ${d.rescore_reminder?`
+        <div class="reminder-box">
+          <i class="ti ti-calendar rb-icon"></i>
+          <div class="rb-text"><span style="font-weight:600">Rescore reminder</span><br>${d.rescore_reminder}</div>
+        </div>`:''}
+      </div>
+    </div>`;
+}
+
+boot();
+</script>
+</body>
+</html>

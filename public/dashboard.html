@@ -618,7 +618,7 @@ function renderBrand(d){
   const metricBlocks=(d.metrics||defaultMetrics).map(block=>{
     const items=block.items.map(item=>{
       const dots=Array.from({length:5},(_,i)=>
-        `<div class="ms-dot${i<item.score?' filled':''}" ${i<item.score?`style="background:${item.col}"`:''} ></div>`
+        `<div class="ms-dot${i<item.score?' filled':''}" ${i<item.score?`style="background:${item.col}"`:''}></div>`
       ).join('');
       return `<div class="metric-score">
         <span class="ms-name">${esc(item.name)}</span>
@@ -954,7 +954,7 @@ function readEditForm(tab){
 }
 
 function readOverview(){
-  const stats=Array.from({length:4},(_,i)=>({
+  const stats=Array.from({length:4},(_,i)>({
     label:gv(`ov-stat-${i}-label`),value:gv(`ov-stat-${i}-value`),sub:gv(`ov-stat-${i}-sub`)
   }));
   const tasks=Array.from({length:8},(_,i)=>({done:gc(`ov-task-${i}-done`),text:gv(`ov-task-${i}-text`)})).filter(t=>t.text);
@@ -964,7 +964,7 @@ function readOverview(){
 }
 
 function readStrategy(){
-  const hier=Array.from({length:5},(_,i)=>({
+  const hier=Array.from({length:5},(_,i)>({
     num:i+1,
     bg:['#F1EFE8','#E6F1FB','#E1F5EE','#EAF3DE','#FAEEDA'][i],
     col:['#444441','#0C447C','#085041','#27500A','#633806'][i],
@@ -997,7 +997,7 @@ function readSprints(){
 }
 
 function readDelivery(){
-  const weeks=Array.from({length:4},(_,i)=>({
+  const weeks=Array.from({length:4},(_,i)>({
     label:gv(`del-wk-${i}-label`)||`Week ${i+1}`,
     tasks:Array.from({length:6},(_,j)=>({status:gv(`del-wk-${i}-task-${j}-status`),text:gv(`del-wk-${i}-task-${j}-text`),date:gv(`del-wk-${i}-task-${j}-date`)})).filter(t=>t.text)
   }));
@@ -1030,7 +1030,7 @@ function readBrand(){
     ['Website design','Website compliance','Customer experience / UX','Site speed','Site visibility / SEO']
   ];
   const sectionLabels=[`Brand — ${s0}/25`,`Marketing & comms — ${s1}/25`,`Website & digital — ${s2}/25`];
-  const metrics=sectionLabels.map((sname,si)=>({
+  const metrics=sectionLabels.map((sname,si)>({
     section:sname,
     items:Array.from({length:5},(_,mi)=>{
       const sc=gi(`br-met-${si}-${mi}`);

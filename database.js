@@ -54,12 +54,13 @@ async function init() {
 
 // ── Seed admin ───────────────────────────────────────────────────────────────
 async function seedAdmin() {
-  const { rows } = await pool.query('SELECT id FROM users WHERE email = $1', ['jenson@manxgrowthsolutions.com']);
-  if (rows.length === 0) {
-    const hash = bcrypt.hashSync('Mgs12345', 12);
-    await pool.query('INSERT INTO users (email, password_hash) VALUES ($1, $2)', ['jenson@manxgrowthsolutions.com', hash]);
-    console.log('Admin user created.');
-  }
+  const hash = bcrypt.hashSync('Mgs12345', 12);
+  await pool.query(
+    `INSERT INTO users (email, password_hash) VALUES ($1, $2)
+     ON CONFLICT (email) DO UPDATE SET password_hash = $2`,
+    ['jenson@manxgrowthsolutions.com', hash]
+  );
+  console.log('Admin user ready.');
 }
 
 // ── Seed clients ─────────────────────────────────────────────────────────────

@@ -1,28 +1,23 @@
 const express = require('express');
 const session = require('express-session');
-const SQLiteStore = require('connect-sqlite3')(session);
+const pgSession = require('connect-pg-simple')(session);
 const bcrypt = require('bcryptjs');
 const path = require('path');
-const fs = require('fs');
-const { q } = require('./database');
+const { pool, q, init } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Ensure data dir for session store
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
-  store: new SQLiteStore({ dir: dataDir, db: 'sessions.db' }),
+  store: new pgSession({ pool, tableName: 'user_sessions', createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET || 'mgs-os-secret-change-in-prod-2025',
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 } // 7 days
+  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
@@ -38,15 +33,20 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
   const { email, password } = req.body;
-  const user = q.userByEmail.get((email || '').toLowerCase().trim());
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-    return res.redirect('/login?error=1');
+  try {
+    const user = await q.userByEmail((email || '').toLowerCase().trim());
+    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+      return res.redirect('/login?error=1');
+    }
+    req.session.userId = user.id;
+    req.session.userEmail = user.email;
+    res.redirect('/');
+  } catch (e) {
+    console.error('Login error:', e.message);
+    res.redirect('/login?error=1');
   }
-  req.session.userId = user.id;
-  req.session.userEmail = user.email;
-  res.redirect('/');
 });
 
 app.post('/logout', (req, res) => {
@@ -58,33 +58,41 @@ app.get('/', requireAuth, (req, res) => {
 });
 
 // ── API: Clients ──────────────────────────────────────────────────────────────
-app.get('/api/clients', requireAuth, (req, res) => {
-  res.json(q.allClients.all());
+app.get('/api/clients', requireAuth, async (req, res) => {
+  try { res.json(await q.allClients()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/clients/:key', requireAuth, (req, res) => {
-  const c = q.clientByKey.get(req.params.key);
-  if (!c) return res.status(404).json({ error: 'Not found' });
-  res.json(c);
+app.get('/api/clients/:key', requireAuth, async (req, res) => {
+  try {
+    const c = await q.clientByKey(req.params.key);
+    if (!c) return res.status(404).json({ error: 'Not found' });
+    res.json(c);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.patch('/api/clients/:key', requireAuth, (req, res) => {
-  const c = q.clientByKey.get(req.params.key);
-  if (!c) return res.status(404).json({ error: 'Not found' });
-  const updated = { ...c, ...req.body, key: req.params.key };
-  q.updateClient.run(updated);
-  res.json(q.clientByKey.get(req.params.key));
+app.patch('/api/clients/:key', requireAuth, async (req, res) => {
+  try {
+    const c = await q.clientByKey(req.params.key);
+    if (!c) return res.status(404).json({ error: 'Not found' });
+    await q.updateClient({ ...c, ...req.body, key: req.params.key });
+    res.json(await q.clientByKey(req.params.key));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── API: Tab data ─────────────────────────────────────────────────────────────
-app.get('/api/clients/:key/tabs/:tab', requireAuth, (req, res) => {
-  const row = q.tabData.get(req.params.key, req.params.tab);
-  res.json(row ? JSON.parse(row.data) : {});
+app.get('/api/clients/:key/tabs/:tab', requireAuth, async (req, res) => {
+  try {
+    const row = await q.tabData(req.params.key, req.params.tab);
+    res.json(row ? JSON.parse(row.data) : {});
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/clients/:key/tabs/:tab', requireAuth, (req, res) => {
-  q.upsertTab.run(req.params.key, req.params.tab, JSON.stringify(req.body));
-  res.json({ ok: true });
+app.put('/api/clients/:key/tabs/:tab', requireAuth, async (req, res) => {
+  try {
+    await q.upsertTab(req.params.key, req.params.tab, JSON.stringify(req.body));
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── API: Session info ─────────────────────────────────────────────────────────
@@ -92,4 +100,15 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({ email: req.session.userEmail });
 });
 
-app.listen(PORT, () => console.log(`MGS OS running on http://localhost:${PORT}`));
+// ── Start ─────────────────────────────────────────────────────────────────────
+async function start() {
+  try {
+    await init();
+    app.listen(PORT, () => console.log(`MGS OS running on http://localhost:${PORT}`));
+  } catch (e) {
+    console.error('Failed to start:', e.message);
+    process.exit(1);
+  }
+}
+
+start();

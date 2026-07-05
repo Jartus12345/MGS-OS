@@ -157,6 +157,27 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .fbtn.secondary{background:var(--bg-secondary);color:var(--text-primary);border:0.5px solid var(--border)}
 .fbtn.secondary:hover{background:var(--bg-tertiary)}
 .save-msg{font-size:11px;color:#27500A;background:#EAF3DE;padding:6px 12px;border-radius:6px;display:none}
+.upload-btn{margin-right:6px;font-size:10px;font-weight:600;padding:5px 11px;border-radius:6px;border:0.5px solid #B5D4F4;background:#E6F1FB;cursor:pointer;font-family:inherit;color:#185FA5;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.upload-btn:hover{background:#d0e6f8}
+
+/* Upload modal */
+.up-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:2000;display:flex;align-items:center;justify-content:center}
+.up-box{width:440px;max-width:92vw;background:#fff;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,0.18);overflow:hidden}
+.up-hdr{padding:16px 20px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.up-title{font-size:13px;font-weight:600}
+.up-close{background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-tertiary);padding:2px;line-height:1}
+.up-body{padding:20px}
+.drop-zone{border:1.5px dashed var(--border-md);border-radius:10px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .15s;background:var(--bg-secondary)}
+.drop-zone:hover,.drop-zone.drag{border-color:#185FA5;background:#EBF4FF}
+.drop-zone i{font-size:28px;color:var(--text-tertiary);margin-bottom:8px;display:block}
+.drop-zone p{font-size:12px;color:var(--text-secondary);margin-bottom:4px}
+.drop-zone small{font-size:10px;color:var(--text-tertiary)}
+.up-file-name{font-size:11px;color:#185FA5;font-weight:500;margin-top:10px;display:none;text-align:center}
+.up-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.up-status{margin-top:14px;font-size:12px;border-radius:8px;padding:10px 14px;display:none;line-height:1.5}
+.up-status.loading{background:#E6F1FB;color:#0C447C;display:block}
+.up-status.success{background:#EAF3DE;color:#1a4a07;display:block}
+.up-status.error{background:#FCEBEB;color:#791F1F;display:block}
 </style>
 </head>
 <body>
@@ -195,6 +216,7 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
     <div class="tab" data-tab="progress"><i class="ti ti-chart-bar"></i>Progress</div>
     <div class="tab" data-tab="brand"><i class="ti ti-shield-check"></i>Brand</div>
     <div class="tab-spacer"></div>
+    <button class="upload-btn" id="upload-btn" onclick="openUpload()"><i class="ti ti-upload"></i>Upload PDF</button>
     <button class="edit-btn" id="edit-btn" onclick="openEdit()"><i class="ti ti-edit"></i>Edit data</button>
   </div>
 </div>
@@ -202,6 +224,31 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
   <div class="loading">Select a client to get started</div>
 </div>
 </div>
+</div>
+
+<!-- Upload modal -->
+<div id="upload-modal" class="up-overlay" style="display:none" onclick="if(event.target===this)closeUpload()">
+  <div class="up-box">
+    <div class="up-hdr">
+      <div class="up-title">Upload PDF report</div>
+      <button class="up-close" onclick="closeUpload()">×</button>
+    </div>
+    <div class="up-body">
+      <p style="font-size:11px;color:var(--text-tertiary);margin-bottom:14px;line-height:1.5">Upload a Planable report, Digital Credibility Scorecard, or Strategy document. The AI will read it and automatically fill in the relevant tabs.</p>
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('pdf-input').click()" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <i class="ti ti-file-type-pdf"></i>
+        <p>Click to choose a PDF, or drag and drop here</p>
+        <small>Max file size: 25 MB</small>
+      </div>
+      <input type="file" id="pdf-input" accept=".pdf,application/pdf" style="display:none" onchange="onFileSelected(event)">
+      <div class="up-file-name" id="up-file-name"></div>
+      <div class="up-status" id="up-status"></div>
+      <div class="up-actions">
+        <button class="fbtn secondary" onclick="closeUpload()">Cancel</button>
+        <button class="fbtn primary" id="up-submit" onclick="submitUpload()" disabled style="opacity:.5;cursor:not-allowed">Process PDF</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Edit modal -->
@@ -1011,6 +1058,75 @@ async function saveEdit(){
     alert('Save failed: '+e.message);
   }
 }
+
+// ── PDF Upload ────────────────────────────────────────────────────────────────
+let selectedFile = null;
+
+function openUpload(){
+  if(!currentClient)return;
+  selectedFile=null;
+  document.getElementById('up-file-name').style.display='none';
+  document.getElementById('up-status').className='up-status';
+  document.getElementById('up-status').textContent='';
+  document.getElementById('pdf-input').value='';
+  document.getElementById('drop-zone').classList.remove('drag');
+  const btn=document.getElementById('up-submit');
+  btn.disabled=true;btn.style.opacity='.5';btn.style.cursor='not-allowed';
+  document.getElementById('upload-modal').style.display='flex';
+}
+function closeUpload(){document.getElementById('upload-modal').style.display='none';}
+
+function setFile(file){
+  if(!file||file.type!=='application/pdf'){
+    showUpStatus('error','Please select a PDF file.');return;
+  }
+  if(file.size>25*1024*1024){
+    showUpStatus('error','File is too large. Maximum size is 25 MB.');return;
+  }
+  selectedFile=file;
+  const fn=document.getElementById('up-file-name');
+  fn.textContent='Selected: '+file.name;fn.style.display='block';
+  document.getElementById('up-status').className='up-status';
+  const btn=document.getElementById('up-submit');
+  btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';
+}
+function onFileSelected(e){setFile(e.target.files[0]);}
+function onDragOver(e){e.preventDefault();document.getElementById('drop-zone').classList.add('drag');}
+function onDragLeave(){document.getElementById('drop-zone').classList.remove('drag');}
+function onDrop(e){e.preventDefault();document.getElementById('drop-zone').classList.remove('drag');setFile(e.dataTransfer.files[0]);}
+
+function showUpStatus(cls,msg){
+  const el=document.getElementById('up-status');
+  el.className='up-status '+cls;el.innerHTML=msg;
+}
+
+async function submitUpload(){
+  if(!selectedFile||!currentClient)return;
+  const btn=document.getElementById('up-submit');
+  btn.disabled=true;btn.style.opacity='.5';btn.style.cursor='not-allowed';
+  showUpStatus('loading','<i class="ti ti-loader" style="animation:spin 1s linear infinite;display:inline-block"></i> Reading PDF with AI… this may take 15–30 seconds.');
+
+  const form=new FormData();
+  form.append('pdf',selectedFile);
+  try{
+    const r=await fetch(`/api/clients/${currentClient}/upload`,{method:'POST',body:form});
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||'Upload failed');
+    const tabList=data.tabs_updated.map(t=>t.charAt(0).toUpperCase()+t.slice(1)).join(', ');
+    showUpStatus('success',`<strong>Done!</strong> Detected: ${data.type_label||data.type}${data.period?' ('+data.period+')':''}.<br>Updated tabs: <strong>${tabList}</strong>`);
+    // Reload current tab if it was updated
+    if(data.tabs_updated.includes(currentTab))await loadTab(currentTab);
+    btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';
+  }catch(e){
+    showUpStatus('error','Error: '+e.message);
+    btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';
+  }
+}
+
+// Spinning loader animation
+const style=document.createElement('style');
+style.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
+document.head.appendChild(style);
 
 boot();
 </script>

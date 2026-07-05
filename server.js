@@ -29,14 +29,14 @@ app.use(session({
   cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
 
-// ── Auth middleware ───────────────────────────────────────────────────────────
+// ── Auth middleware ─────────────────────────────────────────────
 function requireAuth(req, res, next) {
   if (req.session && req.session.userId) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not authenticated' });
   res.redirect('/login');
 }
 
-// ── Pages ─────────────────────────────────────────────────────────────────────
+// ── Pages ─────────────────────────────────────────────────────
 app.get('/login', (req, res) => {
   if (req.session && req.session.userId) return res.redirect('/');
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
@@ -66,7 +66,7 @@ app.get('/', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-// ── API: Clients ──────────────────────────────────────────────────────────────
+// ── API: Clients ────────────────────────────────────────────
 app.get('/api/clients', requireAuth, async (req, res) => {
   try { res.json(await q.allClients()); }
   catch (e) { res.status(500).json({ error: e.message }); }
@@ -89,7 +89,7 @@ app.patch('/api/clients/:key', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── API: Tab data ─────────────────────────────────────────────────────────────
+// ── API: Tab data ───────────────────────────────────────────────
 app.get('/api/clients/:key/tabs/:tab', requireAuth, async (req, res) => {
   try {
     const row = await q.tabData(req.params.key, req.params.tab);
@@ -104,7 +104,7 @@ app.put('/api/clients/:key/tabs/:tab', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── API: PDF upload & AI extraction ──────────────────────────────────────────
+// ── API: PDF upload & AI extraction ────────────────────────────────────────────
 const EXTRACTION_PROMPT = `You are a data extraction assistant for MGS OS, a marketing agency client dashboard.
 
 Analyse this PDF report and extract all relevant data. First identify what type of document it is, then extract the appropriate data.
@@ -323,19 +323,22 @@ app.post('/api/clients/:key/upload', requireAuth, upload.single('pdf'), async (r
   }
 });
 
-// ── API: Session info ─────────────────────────────────────────────────────────
+// ── API: Session info ───────────────────────────────────────────────────
 app.get('/api/me', requireAuth, (req, res) => {
   res.json({ email: req.session.userEmail });
 });
 
-// ── Start ─────────────────────────────────────────────────────────────────────
+process.on('uncaughtException', e => console.error('Uncaught:', e.stack || e.message));
+process.on('unhandledRejection', e => console.error('Unhandled rejection:', e?.stack || e));
+
+// ── Start ─────────────────────────────────────────────────────────────────
 async function start() {
+  app.listen(PORT, () => console.log(`MGS OS running on http://localhost:${PORT}`));
   try {
     await init();
-    app.listen(PORT, () => console.log(`MGS OS running on http://localhost:${PORT}`));
+    console.log('Database ready');
   } catch (e) {
-    console.error('Failed to start:', e.message);
-    process.exit(1);
+    console.error('Database init failed:', e.stack || e.message);
   }
 }
 

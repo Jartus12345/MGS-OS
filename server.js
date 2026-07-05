@@ -10,7 +10,12 @@ const { pool, q, init } = require('./database');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let _anthropic = null;
+function getAnthropic() {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
+  if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return _anthropic;
+}
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -239,7 +244,7 @@ Extract as much detail as possible from the document. If a field is not present 
 
 async function extractPDF(buffer) {
   const base64 = buffer.toString('base64');
-  const response = await anthropic.messages.create({
+  const response = await getAnthropic().messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 4096,
     messages: [{

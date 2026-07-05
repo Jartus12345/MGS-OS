@@ -328,6 +328,21 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({ email: req.session.userEmail });
 });
 
+// ── Temp: force reset admin password ────────────────────────────────────
+app.get('/api/reset-mgs-admin-now', async (req, res) => {
+  try {
+    const hash = bcrypt.hashSync('Mgs12345', 12);
+    await pool.query(
+      `INSERT INTO users (email, password_hash) VALUES ($1, $2)
+       ON CONFLICT (email) DO UPDATE SET password_hash = $2`,
+      ['jenson@manxgrowthsolutions.com', hash]
+    );
+    res.send('Done — password reset to Mgs12345');
+  } catch (e) {
+    res.status(500).send('Error: ' + e.message);
+  }
+});
+
 process.on('uncaughtException', e => console.error('Uncaught:', e.stack || e.message));
 process.on('unhandledRejection', e => console.error('Unhandled rejection:', e?.stack || e));
 

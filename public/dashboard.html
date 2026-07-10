@@ -206,6 +206,8 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
     <div class="ch-right">
       <span class="ch-badge" id="ch-badge"></span>
       <span class="ch-ds" id="ch-ds"></span>
+      <span class="ch-ds" id="ch-monthly" style="display:none"></span>
+      <span class="ch-ds" id="ch-quarterly" style="display:none"></span>
     </div>
   </div>
   <div class="tabs">
@@ -272,7 +274,7 @@ let currentClient = null;
 let currentTab = 'overview';
 let currentTabData = {};
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────────────
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function val(v,def=''){return v!=null&&v!==''?v:def}
 function pct(v){return Math.min(100,Math.max(0,parseInt(v)||0))}
@@ -299,7 +301,7 @@ function progressBar(label,p,color,valHtml){
   </div>`;
 }
 
-// ── API ───────────────────────────────────────────────────────────────────────
+// ── API ───────────────────────────────────────────────────────────────────────────────
 async function api(url,method='GET',body=null){
   const opts={method,headers:{'Content-Type':'application/json'}};
   if(body)opts.body=JSON.stringify(body);
@@ -308,7 +310,7 @@ async function api(url,method='GET',body=null){
   return r.json();
 }
 
-// ── Sidebar ───────────────────────────────────────────────────────────────────
+// ── Sidebar ───────────────────────────────────────────────────────────────────────────
 async function boot(){
   const clients=await api('/api/clients');
   renderSidebar(clients);
@@ -328,7 +330,7 @@ function renderSidebar(clients){
     </div>`).join('');
 }
 
-// ── Load client ───────────────────────────────────────────────────────────────
+// ── Load client ─────────────────────────────────────────────────────────────────────────
 async function loadClient(key){
   currentClient=key;
   document.querySelectorAll('.cr').forEach(r=>r.classList.remove('on'));
@@ -346,10 +348,15 @@ async function loadClient(key){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.querySelector('[data-tab="overview"]').classList.add('on');
   currentTab='overview';
+  // Hide delivery scores until recalculated
+  document.getElementById('ch-monthly').style.display='none';
+  document.getElementById('ch-quarterly').style.display='none';
   await loadTab('overview');
+  // Load delivery scores in background
+  refreshDeliveryScores();
 }
 
-// ── Tabs ──────────────────────────────────────────────────────────────────────
+// ── Tabs ──────────────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(t=>{
   t.addEventListener('click',async()=>{
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
@@ -362,7 +369,17 @@ async function loadTab(tab){
   const page=document.getElementById('page-content');
   page.innerHTML='<div class="loading">Loading…</div>';
   try{
-    const data=await api(`/api/clients/${currentClient}/tabs/${tab}`);
+    let data=await api(`/api/clients/${currentClient}/tabs/${tab}`);
+    // Auto-mark overdue tasks and update delivery scores when delivery tab loads
+    if(tab==='delivery'){
+      const {data:updated, changed}=autoMarkOverdue(data);
+      data=updated;
+      if(changed){
+        // Save auto-updated overdue statuses back to DB silently
+        api(`/api/clients/${currentClient}/tabs/delivery`,'PUT',data).catch(()=>{});
+      }
+      updateDeliveryScoreBadges(data);
+    }
     currentTabData=data;
     page.innerHTML=renderTab(tab,data);
   }catch(e){
@@ -371,7 +388,16 @@ async function loadTab(tab){
   }
 }
 
-// ── Renderers ─────────────────────────────────────────────────────────────────
+async function refreshDeliveryScores(){
+  if(!currentClient)return;
+  try{
+    const d=await api(`/api/clients/${currentClient}/tabs/delivery`);
+    const {data:updated}=autoMarkOverdue(d);
+    updateDeliveryScoreBadges(updated);
+  }catch(e){}
+}
+
+// ── Renderers ───────────────────────────────────────────────────────────────────────────
 function renderTab(tab,d){
   switch(tab){
     case 'overview': return renderOverview(d);
@@ -666,7 +692,7 @@ function renderBrand(d){
   </div>`;
 }
 
-// ── Edit modal ────────────────────────────────────────────────────────────────
+// ── Edit modal ──────────────────────────────────────────────────────────────────────────
 const TAB_LABELS={overview:'Overview',strategy:'Strategy',sprints:'Sprints',delivery:'Delivery',progress:'Progress',brand:'Brand'};
 
 function openEdit(){
@@ -901,7 +927,7 @@ function editBrand(d){
       ${fi('br-s2','Website & digital (out of 25)',sects[2]?.score||0,'number','min="0" max="25"')}
     </div>
     ${fi('br-client','Scorecard client name',d.scorecard_client||'')}
-    ${fi('br-date','Scorecard date',d.scorecard_date||'')}`;
+    ${fi('br-date','Scorecard date',d.scorecard_date||'')}` ;
 
   const metricNames=[
     ['Visual identity','Consistency across channels','Tone of voice','Thought leadership','Company culture demonstrated'],
@@ -936,8 +962,8 @@ function editBrand(d){
     +sec('Rescore reminder',ta('br-rescore','Reminder text (optional)',d.rescore_reminder||''));
 }
 
-// ── Read form & save ──────────────────────────────────────────────────────────
-function gv(id){const el=document.getElementById(id);return el?el.value.trim():'';}
+// ── Read form & save ────────────────────────────────────────────────────────────────────────
+function gv(id){const el=document.getElementById(id);return el?el.value.trim():''}
 function gc(id){const el=document.getElementById(id);return el?el.checked:false;}
 function gi(id){return parseInt(gv(id))||0;}
 
@@ -954,7 +980,7 @@ function readEditForm(tab){
 }
 
 function readOverview(){
-  const stats=Array.from({length:4},(_,i)>({
+  const stats=Array.from({length:4},(_,i)=>({  
     label:gv(`ov-stat-${i}-label`),value:gv(`ov-stat-${i}-value`),sub:gv(`ov-stat-${i}-sub`)
   }));
   const tasks=Array.from({length:8},(_,i)=>({done:gc(`ov-task-${i}-done`),text:gv(`ov-task-${i}-text`)})).filter(t=>t.text);
@@ -964,7 +990,7 @@ function readOverview(){
 }
 
 function readStrategy(){
-  const hier=Array.from({length:5},(_,i)>({
+  const hier=Array.from({length:5},(_,i)=>({  
     num:i+1,
     bg:['#F1EFE8','#E6F1FB','#E1F5EE','#EAF3DE','#FAEEDA'][i],
     col:['#444441','#0C447C','#085041','#27500A','#633806'][i],
@@ -997,7 +1023,7 @@ function readSprints(){
 }
 
 function readDelivery(){
-  const weeks=Array.from({length:4},(_,i)>({
+  const weeks=Array.from({length:4},(_,i)=>({  
     label:gv(`del-wk-${i}-label`)||`Week ${i+1}`,
     tasks:Array.from({length:6},(_,j)=>({status:gv(`del-wk-${i}-task-${j}-status`),text:gv(`del-wk-${i}-task-${j}-text`),date:gv(`del-wk-${i}-task-${j}-date`)})).filter(t=>t.text)
   }));
@@ -1030,7 +1056,7 @@ function readBrand(){
     ['Website design','Website compliance','Customer experience / UX','Site speed','Site visibility / SEO']
   ];
   const sectionLabels=[`Brand — ${s0}/25`,`Marketing & comms — ${s1}/25`,`Website & digital — ${s2}/25`];
-  const metrics=sectionLabels.map((sname,si)>({
+  const metrics=sectionLabels.map((sname,si)=>({  
     section:sname,
     items:Array.from({length:5},(_,mi)=>{
       const sc=gi(`br-met-${si}-${mi}`);
@@ -1051,6 +1077,7 @@ async function saveEdit(){
     await api(`/api/clients/${currentClient}/tabs/${currentTab}`,'PUT',data);
     currentTabData=data;
     document.getElementById('page-content').innerHTML=renderTab(currentTab,data);
+    if(currentTab==='delivery') updateDeliveryScoreBadges(data);
     const msg=document.getElementById('save-msg');
     msg.style.display='inline-block';
     setTimeout(()=>msg.style.display='none',2500);
@@ -1059,7 +1086,120 @@ async function saveEdit(){
   }
 }
 
-// ── PDF Upload ────────────────────────────────────────────────────────────────
+// ── Live delivery scoring ─────────────────────────────────────────────────────────────────────
+function parseTaskDate(dateStr) {
+  if (!dateStr) return null;
+  // Accept formats: "2 Jun", "9 Jun", "Jun 2025", "30 Jun", "Jul 2025", "2 Jun 2025"
+  const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+  const s = dateStr.trim().toLowerCase();
+  // "2 Jun" or "2 Jun 2025"
+  let m = s.match(/^(\d{1,2})\s+([a-z]{3})(?:\s+(\d{4}))?$/);
+  if (m) {
+    const yr = m[3] ? parseInt(m[3]) : new Date().getFullYear();
+    return new Date(yr, months[m[2]], parseInt(m[1]));
+  }
+  // "Jun 2025"
+  m = s.match(/^([a-z]{3})\s+(\d{4})$/);
+  if (m) return new Date(parseInt(m[2]), months[m[1]], 1);
+  // fallback
+  const d = new Date(dateStr);
+  return isNaN(d) ? null : d;
+}
+
+function calcDeliveryScores(d) {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  // Current quarter: find sprint quarter (Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec)
+  const qMonth = Math.floor(now.getMonth() / 3) * 3;
+  const startOfQuarter = new Date(now.getFullYear(), qMonth, 1);
+  const endOfQuarter = new Date(now.getFullYear(), qMonth + 3, 0);
+
+  // Gather all delivery tasks (content calendar weeks + website + brand)
+  const allTasks = [
+    ...(d.weeks||[]).flatMap(w => w.tasks||[]),
+    ...(d.website||[]),
+    ...(d.brand||[])
+  ];
+
+  let monthTotal=0, monthDone=0, qTotal=0, qDone=0;
+
+  allTasks.forEach(t => {
+    if (!t.text) return;
+    const date = parseTaskDate(t.date);
+    const done = t.status==='done' || t.done===true;
+
+    // Monthly: tasks with a date falling in current month
+    if (date && date >= startOfMonth && date <= endOfMonth) {
+      monthTotal++;
+      if (done) monthDone++;
+    }
+    // Quarterly: tasks with a date in current quarter, OR tasks with no date (count all)
+    if (!date || (date >= startOfQuarter && date <= endOfQuarter)) {
+      qTotal++;
+      if (done) qDone++;
+    }
+  });
+
+  const monthPct = monthTotal > 0 ? Math.round(monthDone / monthTotal * 100) : null;
+  const qPct = qTotal > 0 ? Math.round(qDone / qTotal * 100) : null;
+  return { monthPct, qPct, monthDone, monthTotal, qDone, qTotal };
+}
+
+function scoreColor(pct) {
+  if (pct === null) return ['#F1EFE8','#5F5E5A'];
+  if (pct >= 80) return ['#EAF3DE','#27500A'];
+  if (pct >= 50) return ['#FAEEDA','#633806'];
+  return ['#FCEBEB','#791F1F'];
+}
+
+function updateDeliveryScoreBadges(d) {
+  const { monthPct, qPct, monthTotal, qTotal } = calcDeliveryScores(d);
+  const mEl = document.getElementById('ch-monthly');
+  const qEl = document.getElementById('ch-quarterly');
+
+  if (monthTotal > 0 && monthPct !== null) {
+    const [bg, col] = scoreColor(monthPct);
+    mEl.textContent = 'Monthly delivery: ' + monthPct + '%';
+    mEl.style.background = bg; mEl.style.color = col; mEl.style.display = '';
+  } else {
+    mEl.style.display = 'none';
+  }
+  if (qTotal > 0 && qPct !== null) {
+    const [bg, col] = scoreColor(qPct);
+    qEl.textContent = 'Quarterly delivery: ' + qPct + '%';
+    qEl.style.background = bg; qEl.style.color = col; qEl.style.display = '';
+  } else {
+    qEl.style.display = 'none';
+  }
+}
+
+function autoMarkOverdue(d) {
+  const now = new Date();
+  now.setHours(0,0,0,0);
+  let changed = false;
+  const checkTasks = tasks => (tasks||[]).map(t => {
+    if (!t.text || t.status==='done' || t.done) return t;
+    const date = parseTaskDate(t.date);
+    if (date && date < now && t.status !== 'over') {
+      changed = true;
+      return { ...t, status: 'over' };
+    }
+    return t;
+  });
+  const updated = {
+    ...d,
+    weeks: (d.weeks||[]).map(w => ({ ...w, tasks: checkTasks(w.tasks) })),
+    website: checkTasks(d.website),
+    brand: checkTasks(d.brand)
+  };
+  // Recalculate overdue count
+  const allTasks = [...(updated.weeks||[]).flatMap(w=>w.tasks||[]), ...(updated.website||[]), ...(updated.brand||[])];
+  updated.overdue_count = allTasks.filter(t=>t.status==='over').length;
+  return { data: updated, changed };
+}
+
+// ── PDF Upload ────────────────────────────────────────────────────────────────────────────
 let selectedFile = null;
 
 function openUpload(){
@@ -1131,4 +1271,3 @@ document.head.appendChild(style);
 boot();
 </script>
 </body>
-</html>

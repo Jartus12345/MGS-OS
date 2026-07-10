@@ -265,7 +265,6 @@ async function applyExtraction(clientKey, extracted) {
   const updated = [];
 
   if (extracted.type === 'planable') {
-    // Merge into existing overview tab
     const existingOv = await q.tabData(clientKey, 'overview');
     const ov = existingOv ? JSON.parse(existingOv.data) : {};
     if (extracted.overview?.stats) ov.stats = extracted.overview.stats;
@@ -273,7 +272,6 @@ async function applyExtraction(clientKey, extracted) {
     await q.upsertTab(clientKey, 'overview', JSON.stringify(ov));
     updated.push('overview');
 
-    // Merge into progress tab
     const existingPr = await q.tabData(clientKey, 'progress');
     const pr = existingPr ? JSON.parse(existingPr.data) : {};
     if (extracted.progress?.metrics) pr.metrics = extracted.progress.metrics;
@@ -326,21 +324,6 @@ app.post('/api/clients/:key/upload', requireAuth, upload.single('pdf'), async (r
 // ── API: Session info ───────────────────────────────────────────────────
 app.get('/api/me', requireAuth, (req, res) => {
   res.json({ email: req.session.userEmail });
-});
-
-// ── Temp: force reset admin password ────────────────────────────────────
-app.get('/api/reset-mgs-admin-now', async (req, res) => {
-  try {
-    const hash = bcrypt.hashSync('Mgs12345', 12);
-    await pool.query(
-      `INSERT INTO users (email, password_hash) VALUES ($1, $2)
-       ON CONFLICT (email) DO UPDATE SET password_hash = $2`,
-      ['jenson@manxgrowthsolutions.com', hash]
-    );
-    res.send('Done — password reset to Mgs12345');
-  } catch (e) {
-    res.status(500).send('Error: ' + e.message);
-  }
 });
 
 process.on('uncaughtException', e => console.error('Uncaught:', e.stack || e.message));

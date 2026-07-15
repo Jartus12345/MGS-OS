@@ -205,8 +205,7 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
     <div><div class="ch-name" id="ch-name">Select a client</div><div class="ch-sub" id="ch-sub"></div></div>
     <div class="ch-right">
       <span class="ch-badge" id="ch-badge"></span>
-      <span class="ch-ds" id="ch-ds"></span>
-      <span class="ch-ds" id="ch-monthly" style="display:none"></span>
+      <span class="ch-ds" id="ch-ds" style="display:none"></span>
       <span class="ch-ds" id="ch-quarterly" style="display:none"></span>
     </div>
   </div>
@@ -343,14 +342,12 @@ async function loadClient(key){
   document.getElementById('ch-sub').textContent=c.sub||'';
   const b=document.getElementById('ch-badge');
   b.textContent=c.badge;b.style.background=c.badge_bg;b.style.color=c.badge_col;
-  const ds=document.getElementById('ch-ds');
-  ds.textContent='Delivery score: '+c.score;ds.style.background=c.score_bg;ds.style.color=c.score_col;
+  // Delivery score and sprint % are live-calculated — reset while loading
+  document.getElementById('ch-ds').style.display='none';
+  document.getElementById('ch-quarterly').style.display='none';
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.querySelector('[data-tab="overview"]').classList.add('on');
   currentTab='overview';
-  // Hide delivery scores until recalculated
-  document.getElementById('ch-monthly').style.display='none';
-  document.getElementById('ch-quarterly').style.display='none';
   await loadTab('overview');
   // Load delivery scores in background
   refreshDeliveryScores();
@@ -1151,16 +1148,28 @@ function scoreColor(pct) {
 
 function updateDeliveryScoreBadges(d) {
   const { monthPct, qPct, monthTotal, qSections } = calcDeliveryScores(d);
-  const mEl = document.getElementById('ch-monthly');
+  const dsEl = document.getElementById('ch-ds');
   const qEl = document.getElementById('ch-quarterly');
 
-  if (monthTotal > 0 && monthPct !== null) {
+  // Delivery score = live monthly score (tasks due this month, done vs total)
+  if (monthPct !== null) {
     const [bg, col] = scoreColor(monthPct);
-    mEl.textContent = 'Monthly: ' + monthPct + '%';
-    mEl.style.background = bg; mEl.style.color = col; mEl.style.display = '';
+    dsEl.textContent = 'Delivery: ' + monthPct + '%';
+    dsEl.style.background = bg; dsEl.style.color = col; dsEl.style.display = '';
+    // Also update sidebar score for this client
+    if (currentClient) {
+      const cr = document.getElementById('cr-' + currentClient);
+      if (cr) {
+        const badge = cr.querySelector('.cr-score');
+        if (badge) { badge.textContent = monthPct + '%'; badge.style.background = bg; badge.style.color = col; }
+      }
+      // Persist to client record so sidebar score survives page reload
+      api('/api/clients/' + currentClient, 'PATCH', { score: monthPct + '%', score_bg: bg, score_col: col }).catch(()=>{});
+    }
   } else {
-    mEl.style.display = 'none';
+    dsEl.style.display = 'none';
   }
+
   if (qSections > 0 && qPct !== null) {
     const [bg, col] = scoreColor(qPct);
     qEl.textContent = 'Sprint: ' + qPct + '%';

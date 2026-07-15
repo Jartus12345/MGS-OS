@@ -1131,6 +1131,7 @@ function calcSectionPct(tasks) {
 
 function calcDeliveryScores(d) {
   const now = new Date();
+  now.setHours(0,0,0,0);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
@@ -1140,15 +1141,20 @@ function calcDeliveryScores(d) {
   const brandPct     = calcSectionPct(d.brand);
 
   // Monthly: points-weighted, tasks dated in current month
+  // Done = earned pts | Overdue (past date, not done) = 0 earned + tracked separately | Future = 0 earned yet
   const allTasks = [...contentTasks, ...(d.website||[]), ...(d.brand||[])];
-  let monthTotal=0, monthDone=0;
+  let monthTotal=0, monthDone=0, monthOverdue=0;
   allTasks.forEach(t => {
     if (!t.text) return;
     const date = parseTaskDate(t.date);
     if (date && date >= startOfMonth && date <= endOfMonth) {
       const pts = taskPts(t);
       monthTotal += pts;
-      if (isDone(t)) monthDone += pts;
+      if (isDone(t)) {
+        monthDone += pts;
+      } else if (date < now) {
+        monthOverdue += pts;
+      }
     }
   });
   const monthPct = monthTotal > 0 ? Math.round(monthDone/monthTotal*100) : null;
@@ -1157,7 +1163,7 @@ function calcDeliveryScores(d) {
   const qPcts = [contentPct, websitePct, brandPct].filter(p => p !== null);
   const qPct  = qPcts.length > 0 ? Math.round(qPcts.reduce((a,b)=>a+b,0)/qPcts.length) : null;
 
-  return { monthPct, qPct, monthTotal, monthDone, contentPct, websitePct, brandPct, qSections: qPcts.length };
+  return { monthPct, qPct, monthTotal, monthDone, monthOverdue, contentPct, websitePct, brandPct, qSections: qPcts.length };
 }
 
 function scoreColor(pct) {
@@ -1168,14 +1174,16 @@ function scoreColor(pct) {
 }
 
 function updateDeliveryScoreBadges(d) {
-  const { monthPct, qPct, monthTotal, monthDone, qSections } = calcDeliveryScores(d);
+  const { monthPct, qPct, monthTotal, monthDone, monthOverdue, qSections } = calcDeliveryScores(d);
   const dsEl = document.getElementById('ch-ds');
   const qEl = document.getElementById('ch-quarterly');
 
-  // Delivery score = live monthly score, points-weighted
+  // Delivery score = live monthly score, points-weighted, date-aware
   if (monthPct !== null) {
-    const [bg, col] = scoreColor(monthPct);
-    dsEl.textContent = 'Delivery: ' + monthPct + '% · ' + monthDone + '/' + monthTotal + ' pts';
+    const [bg, col] = scoreColor(monthOverdue > 0 ? Math.min(monthPct, 49) : monthPct);
+    let label = 'Delivery: ' + monthPct + '% · ' + monthDone + '/' + monthTotal + ' pts';
+    if (monthOverdue > 0) label += ' · ⚠ ' + monthOverdue + ' pts overdue';
+    dsEl.textContent = label;
     dsEl.style.background = bg; dsEl.style.color = col; dsEl.style.display = '';
     // Also update sidebar score for this client
     if (currentClient) {
@@ -1185,7 +1193,7 @@ function updateDeliveryScoreBadges(d) {
         if (badge) { badge.textContent = monthPct + '%'; badge.style.background = bg; badge.style.color = col; }
       }
       // Persist to client record so sidebar score survives page reload
-      api('/api/clients/' + currentClient, 'PATCH', { score: monthPct + '%', score_bg: bg, score_col: col }).catch(()=>{});
+      api('/api/clients/' + currentClient, 'PATCH', { score: monthPct+'%', score_bg: bg, score_col: col }).catch(()=>{});
     }
   } else {
     dsEl.style.display = 'none';

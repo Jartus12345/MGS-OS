@@ -283,14 +283,21 @@ function ckClass(status){
   if(status==='over')return 'ck over';
   return 'ck';
 }
-function taskRow(t){
+function ptsBadge(pts){
+  if(!pts||pts<=0)return '';
+  const bg=pts>=5?'#EAF3DE':pts>=4?'#E1F5EE':pts>=3?'#FAEEDA':pts>=2?'#E6F1FB':'#F1EFE8';
+  const col=pts>=5?'#27500A':pts>=4?'#085041':pts>=3?'#633806':pts>=2?'#185FA5':'#5F5E5A';
+  return `<span class="tbadge" style="background:${bg};color:${col}">${pts}pt</span>`;
+}
+function taskRow(t,showPts=false){
   const cls=t.done||t.status==='done'?'done':(t.status==='over'?'over':'');
   const badge=t.badge?`<span class="tbadge" style="background:${t.badge_bg};color:${t.badge_col}">${esc(t.badge)}</span>`:'';
+  const pts=showPts&&t.points?ptsBadge(t.points):'';
   const date=t.date?`<span class="tdate">${esc(t.date)}</span>`:'';
   return `<div class="trow">
     <div class="${ckClass(t.done?'done':t.status)}"></div>
     <span class="tn ${cls}">${esc(t.text)}</span>
-    ${badge}${date}
+    ${badge}${pts}${date}
   </div>`;
 }
 function progressBar(label,p,color,valHtml){
@@ -532,8 +539,8 @@ function renderDelivery(d){
     ${w.tasks.map(t=>taskRow(t)).join('')||'<div class="no-data">No tasks yet.</div>'}
   </div>`).join('');
 
-  const website=(d.website||[]).map(t=>taskRow(t)).join('')||'<div class="no-data">No website tasks yet.</div>';
-  const brand=(d.brand||[]).map(t=>taskRow(t)).join('')||'<div class="no-data">No brand tasks yet.</div>';
+  const website=(d.website||[]).map(t=>taskRow(t,true)).join('')||'<div class="no-data">No website tasks yet.</div>';
+  const brand=(d.brand||[]).map(t=>taskRow(t,true)).join('')||'<div class="no-data">No brand tasks yet.</div>';
 
   return `<div class="${bannerClass}">
     <i class="ti ${bannerIcon} ob-icon"></i>
@@ -840,6 +847,7 @@ function editDelivery(d){
     const tasks=Array.from({length:6},(_,j)=>w.tasks[j]||{status:'',text:'',date:''});
     return `<div class="sprint-block">
       <div class="sprint-block-hdr">${fi(`del-wk-${i}-label`,'Week label',w.label)}</div>
+      <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:6px">Social/content posts are auto-scored 1 pt each.</div>
       ${tasks.map((t,j)=>`<div style="display:grid;grid-template-columns:80px 1fr 80px;gap:6px;margin-bottom:6px;align-items:center">
         <select class="fi" id="del-wk-${i}-task-${j}-status" style="padding:6px 8px">
           <option value="" ${t.status===''?'selected':''}>Pending</option>
@@ -853,11 +861,17 @@ function editDelivery(d){
     </div>`;
   }).join('');
 
-  const website=Array.from({length:6},(_,i)=>d.website?.[i]||{status:'',text:'',date:''});
-  const brand=Array.from({length:6},(_,i)=>d.brand?.[i]||{status:'',text:'',date:''});
+  const website=Array.from({length:6},(_,i)=>d.website?.[i]||{status:'',text:'',date:'',points:1});
+  const brand=Array.from({length:6},(_,i)=>d.brand?.[i]||{status:'',text:'',date:'',points:1});
+
+  function ptsSelect(id,val){
+    return `<select class="fi" id="${id}" style="padding:6px 8px" title="Importance (pts)">
+      ${[1,2,3,4,5].map(n=>`<option value="${n}" ${(val||1)==n?'selected':''}>${n}pt</option>`).join('')}
+    </select>`;
+  }
 
   function taskGrid(prefix,items){
-    return items.map((t,i)=>`<div style="display:grid;grid-template-columns:80px 1fr 80px;gap:6px;margin-bottom:6px;align-items:center">
+    return items.map((t,i)=>`<div style="display:grid;grid-template-columns:80px 1fr 80px 52px;gap:6px;margin-bottom:6px;align-items:center">
       <select class="fi" id="${prefix}-${i}-status" style="padding:6px 8px">
         <option value="" ${t.status===''?'selected':''}>Pending</option>
         <option value="prog" ${t.status==='prog'?'selected':''}>In progress</option>
@@ -866,13 +880,14 @@ function editDelivery(d){
       </select>
       <input class="fi" type="text" id="${prefix}-${i}-text" value="${esc(t.text)}" placeholder="Task description…">
       <input class="fi" type="text" id="${prefix}-${i}-date" value="${esc(t.date)}" placeholder="Date">
+      ${ptsSelect(`${prefix}-${i}-points`, t.points)}
     </div>`).join('');
   }
 
-  return `<p style="font-size:11px;color:var(--text-tertiary);margin-bottom:14px">Each row: Status · Task description · Date. Leave rows blank to hide them.</p>`
+  return `<p style="font-size:11px;color:var(--text-tertiary);margin-bottom:14px">Status · Description · Date · Points (1=minor, 5=major deliverable). Content posts auto-score 1pt.</p>`
     +sec('Content calendar — 4 weeks',weeksHtml)
-    +sec('Website tasks',taskGrid('del-web',website))
-    +sec('Brand tasks',taskGrid('del-brd',brand));
+    +sec('Website tasks — score importance 1–5',taskGrid('del-web',website))
+    +sec('Brand tasks — score importance 1–5',taskGrid('del-brd',brand));
 }
 
 function editProgress(d){
@@ -1023,10 +1038,10 @@ function readSprints(){
 function readDelivery(){
   const weeks=Array.from({length:4},(_,i)=>({  
     label:gv(`del-wk-${i}-label`)||`Week ${i+1}`,
-    tasks:Array.from({length:6},(_,j)=>({status:gv(`del-wk-${i}-task-${j}-status`),text:gv(`del-wk-${i}-task-${j}-text`),date:gv(`del-wk-${i}-task-${j}-date`)})).filter(t=>t.text)
+    tasks:Array.from({length:6},(_,j)=>({status:gv(`del-wk-${i}-task-${j}-status`),text:gv(`del-wk-${i}-task-${j}-text`),date:gv(`del-wk-${i}-task-${j}-date`),points:1})).filter(t=>t.text)
   }));
-  const website=Array.from({length:6},(_,i)=>({status:gv(`del-web-${i}-status`),text:gv(`del-web-${i}-text`),date:gv(`del-web-${i}-date`)})).filter(t=>t.text);
-  const brand=Array.from({length:6},(_,i)=>({status:gv(`del-brd-${i}-status`),text:gv(`del-brd-${i}-text`),date:gv(`del-brd-${i}-date`)})).filter(t=>t.text);
+  const website=Array.from({length:6},(_,i)=>({status:gv(`del-web-${i}-status`),text:gv(`del-web-${i}-text`),date:gv(`del-web-${i}-date`),points:parseInt(gv(`del-web-${i}-points`))||1})).filter(t=>t.text);
+  const brand=Array.from({length:6},(_,i)=>({status:gv(`del-brd-${i}-status`),text:gv(`del-brd-${i}-text`),date:gv(`del-brd-${i}-date`),points:parseInt(gv(`del-brd-${i}-points`))||1})).filter(t=>t.text);
   const overdueCount=[...weeks.flatMap(w=>w.tasks),...website,...brand].filter(t=>t.status==='over').length;
   return {overdue_count:overdueCount,weeks,website,brand};
 }
@@ -1103,38 +1118,44 @@ function parseTaskDate(dateStr) {
   return isNaN(d) ? null : d;
 }
 
+function taskPts(t){ return t.points||1; }
+function isDone(t){ return t.status==='done'||t.done===true; }
+
 function calcSectionPct(tasks) {
   const valid = (tasks||[]).filter(t => t.text);
   if (!valid.length) return null;
-  return Math.round(valid.filter(t => t.status==='done' || t.done===true).length / valid.length * 100);
+  const total = valid.reduce((s,t) => s+taskPts(t), 0);
+  const done  = valid.filter(isDone).reduce((s,t) => s+taskPts(t), 0);
+  return total > 0 ? Math.round(done/total*100) : null;
 }
 
 function calcDeliveryScores(d) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const endOfMonth   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
   const contentTasks = (d.weeks||[]).flatMap(w => w.tasks||[]);
-  const contentPct = calcSectionPct(contentTasks);
-  const websitePct = calcSectionPct(d.website);
-  const brandPct = calcSectionPct(d.brand);
+  const contentPct   = calcSectionPct(contentTasks);
+  const websitePct   = calcSectionPct(d.website);
+  const brandPct     = calcSectionPct(d.brand);
 
-  // Monthly: tasks with a specific date falling in the current month
+  // Monthly: points-weighted, tasks dated in current month
   const allTasks = [...contentTasks, ...(d.website||[]), ...(d.brand||[])];
   let monthTotal=0, monthDone=0;
   allTasks.forEach(t => {
     if (!t.text) return;
     const date = parseTaskDate(t.date);
     if (date && date >= startOfMonth && date <= endOfMonth) {
-      monthTotal++;
-      if (t.status==='done' || t.done===true) monthDone++;
+      const pts = taskPts(t);
+      monthTotal += pts;
+      if (isDone(t)) monthDone += pts;
     }
   });
-  const monthPct = monthTotal > 0 ? Math.round(monthDone / monthTotal * 100) : null;
+  const monthPct = monthTotal > 0 ? Math.round(monthDone/monthTotal*100) : null;
 
-  // Sprint alignment: average completion across all 3 delivery workstreams
+  // Sprint alignment: weighted average across 3 sections
   const qPcts = [contentPct, websitePct, brandPct].filter(p => p !== null);
-  const qPct = qPcts.length > 0 ? Math.round(qPcts.reduce((a,b) => a+b, 0) / qPcts.length) : null;
+  const qPct  = qPcts.length > 0 ? Math.round(qPcts.reduce((a,b)=>a+b,0)/qPcts.length) : null;
 
   return { monthPct, qPct, monthTotal, monthDone, contentPct, websitePct, brandPct, qSections: qPcts.length };
 }
@@ -1147,14 +1168,14 @@ function scoreColor(pct) {
 }
 
 function updateDeliveryScoreBadges(d) {
-  const { monthPct, qPct, monthTotal, qSections } = calcDeliveryScores(d);
+  const { monthPct, qPct, monthTotal, monthDone, qSections } = calcDeliveryScores(d);
   const dsEl = document.getElementById('ch-ds');
   const qEl = document.getElementById('ch-quarterly');
 
-  // Delivery score = live monthly score (tasks due this month, done vs total)
+  // Delivery score = live monthly score, points-weighted
   if (monthPct !== null) {
     const [bg, col] = scoreColor(monthPct);
-    dsEl.textContent = 'Delivery: ' + monthPct + '%';
+    dsEl.textContent = 'Delivery: ' + monthPct + '% · ' + monthDone + '/' + monthTotal + ' pts';
     dsEl.style.background = bg; dsEl.style.color = col; dsEl.style.display = '';
     // Also update sidebar score for this client
     if (currentClient) {

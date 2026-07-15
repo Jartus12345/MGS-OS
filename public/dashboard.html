@@ -375,10 +375,10 @@ async function loadTab(tab){
       const {data:updated, changed}=autoMarkOverdue(data);
       data=updated;
       if(changed){
-        // Save auto-updated overdue statuses back to DB silently
         api(`/api/clients/${currentClient}/tabs/delivery`,'PUT',data).catch(()=>{});
       }
       updateDeliveryScoreBadges(data);
+      pushCascade(data);
     }
     currentTabData=data;
     page.innerHTML=renderTab(tab,data);
@@ -394,6 +394,7 @@ async function refreshDeliveryScores(){
     const d=await api(`/api/clients/${currentClient}/tabs/delivery`);
     const {data:updated}=autoMarkOverdue(d);
     updateDeliveryScoreBadges(updated);
+    pushCascade(updated);
   }catch(e){}
 }
 
@@ -1077,7 +1078,10 @@ async function saveEdit(){
     await api(`/api/clients/${currentClient}/tabs/${currentTab}`,'PUT',data);
     currentTabData=data;
     document.getElementById('page-content').innerHTML=renderTab(currentTab,data);
-    if(currentTab==='delivery') updateDeliveryScoreBadges(data);
+    if(currentTab==='delivery'){
+      updateDeliveryScoreBadges(data);
+      pushCascade(data);
+    }
     const msg=document.getElementById('save-msg');
     msg.style.display='inline-block';
     setTimeout(()=>msg.style.display='none',2500);
@@ -1086,64 +1090,56 @@ async function saveEdit(){
   }
 }
 
-// ── Live delivery scoring ─────────────────────────────────────────────────────────────────────
+// ── Live delivery scoring + cascade ──────────────────────────────────────────────────────────
 function parseTaskDate(dateStr) {
   if (!dateStr) return null;
-  // Accept formats: "2 Jun", "9 Jun", "Jun 2025", "30 Jun", "Jul 2025", "2 Jun 2025"
   const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
   const s = dateStr.trim().toLowerCase();
-  // "2 Jun" or "2 Jun 2025"
   let m = s.match(/^(\d{1,2})\s+([a-z]{3})(?:\s+(\d{4}))?$/);
   if (m) {
     const yr = m[3] ? parseInt(m[3]) : new Date().getFullYear();
     return new Date(yr, months[m[2]], parseInt(m[1]));
   }
-  // "Jun 2025"
   m = s.match(/^([a-z]{3})\s+(\d{4})$/);
   if (m) return new Date(parseInt(m[2]), months[m[1]], 1);
-  // fallback
   const d = new Date(dateStr);
   return isNaN(d) ? null : d;
+}
+
+function calcSectionPct(tasks) {
+  const valid = (tasks||[]).filter(t => t.text);
+  if (!valid.length) return null;
+  return Math.round(valid.filter(t => t.status==='done' || t.done===true).length / valid.length * 100);
 }
 
 function calcDeliveryScores(d) {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  // Current quarter: find sprint quarter (Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec)
-  const qMonth = Math.floor(now.getMonth() / 3) * 3;
-  const startOfQuarter = new Date(now.getFullYear(), qMonth, 1);
-  const endOfQuarter = new Date(now.getFullYear(), qMonth + 3, 0);
 
-  // Gather all delivery tasks (content calendar weeks + website + brand)
-  const allTasks = [
-    ...(d.weeks||[]).flatMap(w => w.tasks||[]),
-    ...(d.website||[]),
-    ...(d.brand||[])
-  ];
+  const contentTasks = (d.weeks||[]).flatMap(w => w.tasks||[]);
+  const contentPct = calcSectionPct(contentTasks);
+  const websitePct = calcSectionPct(d.website);
+  const brandPct = calcSectionPct(d.brand);
 
-  let monthTotal=0, monthDone=0, qTotal=0, qDone=0;
-
+  // Monthly: tasks with a specific date falling in the current month
+  const allTasks = [...contentTasks, ...(d.website||[]), ...(d.brand||[])];
+  let monthTotal=0, monthDone=0;
   allTasks.forEach(t => {
     if (!t.text) return;
     const date = parseTaskDate(t.date);
-    const done = t.status==='done' || t.done===true;
-
-    // Monthly: tasks with a date falling in current month
     if (date && date >= startOfMonth && date <= endOfMonth) {
       monthTotal++;
-      if (done) monthDone++;
-    }
-    // Quarterly: tasks with a date in current quarter, OR tasks with no date (count all)
-    if (!date || (date >= startOfQuarter && date <= endOfQuarter)) {
-      qTotal++;
-      if (done) qDone++;
+      if (t.status==='done' || t.done===true) monthDone++;
     }
   });
-
   const monthPct = monthTotal > 0 ? Math.round(monthDone / monthTotal * 100) : null;
-  const qPct = qTotal > 0 ? Math.round(qDone / qTotal * 100) : null;
-  return { monthPct, qPct, monthDone, monthTotal, qDone, qTotal };
+
+  // Sprint alignment: average completion across all 3 delivery workstreams
+  const qPcts = [contentPct, websitePct, brandPct].filter(p => p !== null);
+  const qPct = qPcts.length > 0 ? Math.round(qPcts.reduce((a,b) => a+b, 0) / qPcts.length) : null;
+
+  return { monthPct, qPct, monthTotal, monthDone, contentPct, websitePct, brandPct, qSections: qPcts.length };
 }
 
 function scoreColor(pct) {
@@ -1154,24 +1150,63 @@ function scoreColor(pct) {
 }
 
 function updateDeliveryScoreBadges(d) {
-  const { monthPct, qPct, monthTotal, qTotal } = calcDeliveryScores(d);
+  const { monthPct, qPct, monthTotal, qSections } = calcDeliveryScores(d);
   const mEl = document.getElementById('ch-monthly');
   const qEl = document.getElementById('ch-quarterly');
 
   if (monthTotal > 0 && monthPct !== null) {
     const [bg, col] = scoreColor(monthPct);
-    mEl.textContent = 'Monthly delivery: ' + monthPct + '%';
+    mEl.textContent = 'Monthly: ' + monthPct + '%';
     mEl.style.background = bg; mEl.style.color = col; mEl.style.display = '';
   } else {
     mEl.style.display = 'none';
   }
-  if (qTotal > 0 && qPct !== null) {
+  if (qSections > 0 && qPct !== null) {
     const [bg, col] = scoreColor(qPct);
-    qEl.textContent = 'Quarterly delivery: ' + qPct + '%';
+    qEl.textContent = 'Sprint: ' + qPct + '%';
     qEl.style.background = bg; qEl.style.color = col; qEl.style.display = '';
   } else {
     qEl.style.display = 'none';
   }
+}
+
+// Push delivery completion into strategy workstreams + active sprint bar — fires silently in background
+async function pushCascade(d) {
+  if (!currentClient) return;
+  const { contentPct, websitePct, brandPct, qPct } = calcDeliveryScores(d);
+
+  // Update strategy workstreams by matching label keywords
+  try {
+    const strategy = await api(`/api/clients/${currentClient}/tabs/strategy`);
+    if (strategy.workstreams?.length) {
+      let changed = false;
+      strategy.workstreams = strategy.workstreams.map(ws => {
+        const lbl = (ws.label||'').toLowerCase();
+        let pct = null;
+        if (lbl.includes('content') || lbl.includes('social') || lbl.includes('calendar')) pct = contentPct;
+        else if (lbl.includes('website') || lbl.includes('web')) pct = websitePct;
+        else if (lbl.includes('brand')) pct = brandPct;
+        if (pct === null) return ws;
+        changed = true;
+        const [,col] = scoreColor(pct);
+        return { ...ws, pct, color: col, val: pct+'%', val_col: col };
+      });
+      if (changed) api(`/api/clients/${currentClient}/tabs/strategy`, 'PUT', strategy).catch(()=>{});
+    }
+  } catch(e) {}
+
+  // Update active sprint progress bar with overall sprint alignment score
+  try {
+    if (qPct === null) return;
+    const sprints = await api(`/api/clients/${currentClient}/tabs/sprints`);
+    if (sprints.sprints?.length) {
+      const idx = sprints.sprints.findIndex(s => s.status === 'In progress');
+      const target = idx >= 0 ? idx : 0;
+      const [,col] = scoreColor(qPct);
+      sprints.sprints[target] = { ...sprints.sprints[target], bar_pct: qPct, bar_col: col };
+      api(`/api/clients/${currentClient}/tabs/sprints`, 'PUT', sprints).catch(()=>{});
+    }
+  } catch(e) {}
 }
 
 function autoMarkOverdue(d) {

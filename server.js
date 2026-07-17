@@ -111,12 +111,14 @@ Analyse this PDF report and extract all relevant data. First identify what type 
 
 DOCUMENT TYPES — identify the type FIRST before extracting:
 - "content_calendar": A content calendar, posting schedule, or social media plan. Contains a list of posts/content pieces with due dates, titles, descriptions, and requirements. Organised by week, date, or post number. THIS IS NOT a strategy document. Key signals: post numbers (Post 1, Post 2…), due dates per post, content briefs, approval requirements, social media captions.
+- "task_list": A document describing one or more tasks, deliverables, or work items for the client. Could be a website brief, page design spec, copywriting brief, brand asset request, logo brief, photography brief, print/design job, etc. Key signals: a list of things to do or deliver, descriptions of work, deadlines, requirements. Use this when the document is clearly a task or brief rather than a performance report or strategy. Also set a "section" field: "website" if the tasks relate to a website, web pages, SEO, or digital; "brand" if they relate to brand identity, design assets, print, photography, copywriting, or visual work. If genuinely mixed or unclear, pick the closest fit.
 - "planable": A Planable social media analytics/performance report. Contains metrics like impressions, engagements, followers, reach, page views, posts published, audience data, top performing content, engagement rates, follower growth. Key signal: numerical performance data, charts, statistics.
 - "scorecard": A Digital Credibility Scorecard. Contains scores out of 5 for individual metrics grouped into Brand, Marketing & Communications, and Website & Digital. Total score out of 75.
 - "strategy": A strategy document or sprint brief. Contains commercial objectives, desired perceptions, long-term strategy, workstreams, sprint goals. Does NOT include content calendars or posting schedules.
 - "unknown": Cannot determine type.
 
 IMPORTANT: A content calendar with posts and due dates is ALWAYS "content_calendar", never "strategy".
+IMPORTANT: A website brief, page spec, or list of website/brand deliverables is ALWAYS "task_list", never "strategy".
 
 Return ONLY a single valid JSON object. No explanation, no markdown, just the JSON.
 
@@ -232,6 +234,20 @@ If type is "content_calendar", return:
 
 Group posts by calendar week. Set status to "" (empty string, not done). Set points to 1 for every post. Use the post title as text. Put the full post description, brief, caption, or content notes in desc. Format date as "DD Mon" (e.g. "14 Jul"). Include ALL posts found in the document. Omit desc only if truly no description exists.
 
+If type is "task_list", return:
+{
+  "type": "task_list",
+  "section": "website",
+  "period": "July 2026",
+  "tabs_updated": ["delivery"],
+  "tasks": [
+    {"status": "", "text": "Short task title", "desc": "Full description of the task, requirements, and any notes from the document", "date": "31 Jul", "points": 3},
+    {"status": "", "text": "Another task", "desc": "Description", "date": "", "points": 2}
+  ]
+}
+
+Set section to "website" or "brand" as described above. Extract every task or deliverable mentioned. Use a short title as text and put all detail in desc. Estimate points importance 1–5 based on how large or significant the task appears (1=minor, 5=major deliverable). If a due date is mentioned use "DD Mon" format, otherwise leave date as "". Set status to "" for all tasks.
+
 If type is "strategy", return:
 {
   "type": "strategy",
@@ -314,6 +330,19 @@ async function applyExtraction(clientKey, extracted) {
     updated.push('brand');
   }
 
+  if (extracted.type === 'task_list' && extracted.tasks?.length) {
+    const existing = await q.tabData(clientKey, 'delivery');
+    const del = existing ? JSON.parse(existing.data) : {};
+    const section = extracted.section === 'brand' ? 'brand' : 'website';
+    // Append to existing tasks (dedupe by text)
+    const existing_tasks = del[section] || [];
+    const newTexts = new Set(extracted.tasks.map(t => t.text));
+    const merged = existing_tasks.filter(t => !newTexts.has(t.text)).concat(extracted.tasks);
+    del[section] = merged;
+    await q.upsertTab(clientKey, 'delivery', JSON.stringify(del));
+    updated.push('delivery');
+  }
+
   if (extracted.type === 'content_calendar' && extracted.delivery?.weeks?.length) {
     const existing = await q.tabData(clientKey, 'delivery');
     const del = existing ? JSON.parse(existing.data) : {};
@@ -344,7 +373,7 @@ app.post('/api/clients/:key/upload', requireAuth, upload.single('pdf'), async (r
     const extracted = await extractPDF(req.file.buffer);
     const updated = await applyExtraction(req.params.key, extracted);
 
-    const typeLabels = { planable: 'Planable report', scorecard: 'Digital Credibility Scorecard', strategy: 'Strategy document', content_calendar: 'Content calendar' };
+    const typeLabels = { planable: 'Planable report', scorecard: 'Digital Credibility Scorecard', strategy: 'Strategy document', content_calendar: 'Content calendar', task_list: `Task list (${extracted.section||'delivery'})` };
     res.json({
       ok: true,
       type: extracted.type,

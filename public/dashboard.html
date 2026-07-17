@@ -332,7 +332,8 @@ async function toggleDeliveryTask(tid){
   let found=false;
   // Parse tid: wk0t1 → week 0 task 1, web2 → website[2], brd2 → brand[2]
   if(tid.startsWith('wk')){
-    const [,wi,,ti]=[...tid.match(/wk(\d+)t(\d+)/)||[]].map(Number);
+    const m=tid.match(/wk(\d+)t(\d+)/);
+    const wi=parseInt(m[1]),ti=parseInt(m[2]);
     const t=d.weeks?.[wi]?.tasks?.[ti];
     if(t){const done=!(t.done||t.status==='done');t.status=done?'done':'';t.done=done;found=true;}
   } else if(tid.startsWith('web')){

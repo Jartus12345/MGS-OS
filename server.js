@@ -216,21 +216,21 @@ If type is "content_calendar", return:
       {
         "label": "Week 1 — 1–7 Jul",
         "tasks": [
-          {"status": "", "text": "Post title or caption summary", "date": "01 Jul", "points": 1},
-          {"status": "", "text": "Another post title", "date": "03 Jul", "points": 1}
+          {"status": "", "text": "Post title or caption summary", "desc": "Full post description, brief, or caption from the PDF", "date": "01 Jul", "points": 1},
+          {"status": "", "text": "Another post title", "desc": "Description of what this post should contain", "date": "03 Jul", "points": 1}
         ]
       },
       {
         "label": "Week 2 — 8–14 Jul",
         "tasks": [
-          {"status": "", "text": "Post title", "date": "10 Jul", "points": 1}
+          {"status": "", "text": "Post title", "desc": "Post description or brief", "date": "10 Jul", "points": 1}
         ]
       }
     ]
   }
 }
 
-Group posts by calendar week. Set status to "" (empty string, not done). Set points to 1 for every post. Use the post title, caption brief, or content description as text. Format date as "DD Mon" (e.g. "14 Jul"). Include ALL posts found in the document.
+Group posts by calendar week. Set status to "" (empty string, not done). Set points to 1 for every post. Use the post title as text. Put the full post description, brief, caption, or content notes in desc. Format date as "DD Mon" (e.g. "14 Jul"). Include ALL posts found in the document. Omit desc only if truly no description exists.
 
 If type is "strategy", return:
 {

@@ -71,15 +71,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pw{margin-bottom:9px}
 .trow{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:0.5px solid var(--border)}
 .trow:last-child{border-bottom:none}
-.ck{width:15px;height:15px;border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--border-md)}
+.trow-wrap{border-bottom:0.5px solid var(--border)}.trow-wrap:last-child{border-bottom:none}
+.trow-wrap .trow{border-bottom:none;padding-bottom:4px}
+.ck{width:15px;height:15px;border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--border-md);cursor:pointer;transition:background .15s,border-color .15s}
+.ck:hover{border-color:#639922}
 .ck.done{background:#639922;border-color:#639922}
 .ck.done::after{content:'';display:block;width:8px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
 .ck.prog{background:#E6F1FB;border-color:#185FA5}
 .ck.over{background:#FCEBEB;border-color:#E24B4A}
-.tn{font-size:11px;color:var(--text-secondary);flex:1}
+.ck.over:hover{border-color:#639922}
+.tn{font-size:11px;color:var(--text-secondary);flex:1;cursor:pointer}
 .tn.done{text-decoration:line-through;color:var(--text-tertiary)}
 .tn.over{color:#A32D2D;font-weight:500}
 .tdate{font-size:10px;color:var(--text-tertiary);flex-shrink:0}
+.tdesc-btn{font-size:10px;color:var(--text-tertiary);cursor:pointer;flex-shrink:0;padding:1px 5px;border-radius:4px;border:0.5px solid var(--border-md);background:var(--bg-secondary);white-space:nowrap}
+.tdesc-btn:hover{background:var(--border);color:var(--text-primary)}
+.tdesc-panel{display:none;font-size:11px;color:var(--text-tertiary);line-height:1.5;padding:4px 0 8px 24px}
+.tdesc-panel.open{display:block}
 .tbadge{font-size:10px;padding:2px 6px;border-radius:8px;font-weight:500;white-space:nowrap;flex-shrink:0}
 .mrow{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border)}
 .mrow:last-child{border-bottom:none}
@@ -289,16 +297,63 @@ function ptsBadge(pts){
   const col=pts>=5?'#27500A':pts>=4?'#085041':pts>=3?'#633806':pts>=2?'#185FA5':'#5F5E5A';
   return `<span class="tbadge" style="background:${bg};color:${col}">${pts}pt</span>`;
 }
-function taskRow(t,showPts=false){
-  const cls=t.done||t.status==='done'?'done':(t.status==='over'?'over':'');
+function taskRow(t,showPts=false,tid=''){
+  const isDone=t.done||t.status==='done';
+  const cls=isDone?'done':(t.status==='over'?'over':'');
   const badge=t.badge?`<span class="tbadge" style="background:${t.badge_bg};color:${t.badge_col}">${esc(t.badge)}</span>`:'';
   const pts=showPts&&t.points?ptsBadge(t.points):'';
   const date=t.date?`<span class="tdate">${esc(t.date)}</span>`:'';
+  const ckAttr=tid?`onclick="toggleDeliveryTask('${tid}')" title="Mark ${isDone?'incomplete':'complete'}"`:'';
+  const descId=tid?`tdesc-${tid}`:'';
+  const descBtn=t.desc&&tid?`<span class="tdesc-btn" onclick="toggleDesc('${descId}')">Details</span>`:'';
+  const descPanel=t.desc&&tid?`<div class="tdesc-panel" id="${descId}">${esc(t.desc)}</div>`:'';
+  if(tid){
+    return `<div class="trow-wrap">
+      <div class="trow">
+        <div class="${ckClass(isDone?'done':t.status)}" ${ckAttr}></div>
+        <span class="tn ${cls}" onclick="toggleDeliveryTask('${tid}')">${esc(t.text)}</span>
+        ${badge}${pts}${date}${descBtn}
+      </div>${descPanel}
+    </div>`;
+  }
   return `<div class="trow">
-    <div class="${ckClass(t.done?'done':t.status)}"></div>
+    <div class="${ckClass(isDone?'done':t.status)}"></div>
     <span class="tn ${cls}">${esc(t.text)}</span>
     ${badge}${pts}${date}
   </div>`;
+}
+function toggleDesc(id){
+  const el=document.getElementById(id);
+  if(el)el.classList.toggle('open');
+}
+async function toggleDeliveryTask(tid){
+  if(!currentClient||!currentTabData)return;
+  const d=currentTabData;
+  let found=false;
+  // Parse tid: wk0t1 → week 0 task 1, web2 → website[2], brd2 → brand[2]
+  if(tid.startsWith('wk')){
+    const [,wi,,ti]=[...tid.match(/wk(\d+)t(\d+)/)||[]].map(Number);
+    const t=d.weeks?.[wi]?.tasks?.[ti];
+    if(t){const done=!(t.done||t.status==='done');t.status=done?'done':'';t.done=done;found=true;}
+  } else if(tid.startsWith('web')){
+    const i=parseInt(tid.slice(3));
+    const t=d.website?.[i];
+    if(t){const done=!(t.done||t.status==='done');t.status=done?'done':'';t.done=done;found=true;}
+  } else if(tid.startsWith('brd')){
+    const i=parseInt(tid.slice(3));
+    const t=d.brand?.[i];
+    if(t){const done=!(t.done||t.status==='done');t.status=done?'done':'';t.done=done;found=true;}
+  }
+  if(!found)return;
+  // Recalc overdue count
+  const all=[...(d.weeks||[]).flatMap(w=>w.tasks||[]),...(d.website||[]),...(d.brand||[])];
+  d.overdue_count=all.filter(t=>t.status==='over').length;
+  // Save, update badges, cascade
+  api(`/api/clients/${currentClient}/tabs/delivery`,'PUT',d).catch(()=>{});
+  updateDeliveryScoreBadges(d);
+  pushCascade(d);
+  // Re-render delivery tab in place
+  document.getElementById('page-content').innerHTML=renderTab('delivery',d);
 }
 function progressBar(label,p,color,valHtml){
   return `<div class="pw">
@@ -534,13 +589,13 @@ function renderDelivery(d){
   const weeks=(d.weeks||[
     {label:'Week 1',tasks:[]},{label:'Week 2',tasks:[]},
     {label:'Week 3',tasks:[]},{label:'Week 4',tasks:[]}
-  ]).map(w=>`<div>
+  ]).map((w,wi)=>`<div>
     <div style="font-size:11px;font-weight:600;margin-bottom:8px;padding-bottom:6px;border-bottom:0.5px solid rgba(0,0,0,0.1)">${esc(w.label)}</div>
-    ${w.tasks.map(t=>taskRow(t)).join('')||'<div class="no-data">No tasks yet.</div>'}
+    ${w.tasks.map((t,ti)=>taskRow(t,false,`wk${wi}t${ti}`)).join('')||'<div class="no-data">No tasks yet.</div>'}
   </div>`).join('');
 
-  const website=(d.website||[]).map(t=>taskRow(t,true)).join('')||'<div class="no-data">No website tasks yet.</div>';
-  const brand=(d.brand||[]).map(t=>taskRow(t,true)).join('')||'<div class="no-data">No brand tasks yet.</div>';
+  const website=(d.website||[]).map((t,i)=>taskRow(t,true,`web${i}`)).join('')||'<div class="no-data">No website tasks yet.</div>';
+  const brand=(d.brand||[]).map((t,i)=>taskRow(t,true,`brd${i}`)).join('')||'<div class="no-data">No brand tasks yet.</div>';
 
   return `<div class="${bannerClass}">
     <i class="ti ${bannerIcon} ob-icon"></i>

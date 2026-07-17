@@ -109,11 +109,14 @@ const EXTRACTION_PROMPT = `You are a data extraction assistant for MGS OS, a mar
 
 Analyse this PDF report and extract all relevant data. First identify what type of document it is, then extract the appropriate data.
 
-DOCUMENT TYPES:
-- "planable": A Planable social media analytics/performance report. Contains metrics like impressions, engagements, followers, reach, page views, posts published, audience data, top performing content, engagement rates, follower growth.
-- "scorecard": A Digital Credibility Scorecard. Contains scores out of 5 for individual metrics grouped into Brand (visual identity, tone of voice, thought leadership, consistency, culture), Marketing & Communications (social media, content quality, stakeholder messaging, reputation, engagement), and Website & Digital (design, compliance, UX, site speed, SEO). Total score out of 75.
-- "strategy": A strategy document or sprint brief. Contains objectives, desired perceptions, workstreams, tasks, timelines, sprint goals.
+DOCUMENT TYPES — identify the type FIRST before extracting:
+- "content_calendar": A content calendar, posting schedule, or social media plan. Contains a list of posts/content pieces with due dates, titles, descriptions, and requirements. Organised by week, date, or post number. THIS IS NOT a strategy document. Key signals: post numbers (Post 1, Post 2…), due dates per post, content briefs, approval requirements, social media captions.
+- "planable": A Planable social media analytics/performance report. Contains metrics like impressions, engagements, followers, reach, page views, posts published, audience data, top performing content, engagement rates, follower growth. Key signal: numerical performance data, charts, statistics.
+- "scorecard": A Digital Credibility Scorecard. Contains scores out of 5 for individual metrics grouped into Brand, Marketing & Communications, and Website & Digital. Total score out of 75.
+- "strategy": A strategy document or sprint brief. Contains commercial objectives, desired perceptions, long-term strategy, workstreams, sprint goals. Does NOT include content calendars or posting schedules.
 - "unknown": Cannot determine type.
+
+IMPORTANT: A content calendar with posts and due dates is ALWAYS "content_calendar", never "strategy".
 
 Return ONLY a single valid JSON object. No explanation, no markdown, just the JSON.
 
@@ -203,6 +206,32 @@ For metric item colour: score >= 4 use "#639922", score >= 3 use "#EF9F27", scor
 For overall colour: score >= 51 use "#639922", score >= 26 use "#EF9F27", else "#E24B4A".
 Overall label: 0-25 "Needs development · 0–25 range", 26-50 "Developing · 26–50 range", 51-65 "Established · 51–65 range", 66-75 "Leading · 66–75 range".
 
+If type is "content_calendar", return:
+{
+  "type": "content_calendar",
+  "period": "July 2026",
+  "tabs_updated": ["delivery"],
+  "delivery": {
+    "weeks": [
+      {
+        "label": "Week 1 — 1–7 Jul",
+        "tasks": [
+          {"status": "", "text": "Post title or caption summary", "date": "01 Jul", "points": 1},
+          {"status": "", "text": "Another post title", "date": "03 Jul", "points": 1}
+        ]
+      },
+      {
+        "label": "Week 2 — 8–14 Jul",
+        "tasks": [
+          {"status": "", "text": "Post title", "date": "10 Jul", "points": 1}
+        ]
+      }
+    ]
+  }
+}
+
+Group posts by calendar week. Set status to "" (empty string, not done). Set points to 1 for every post. Use the post title, caption brief, or content description as text. Format date as "DD Mon" (e.g. "14 Jul"). Include ALL posts found in the document.
+
 If type is "strategy", return:
 {
   "type": "strategy",
@@ -285,6 +314,14 @@ async function applyExtraction(clientKey, extracted) {
     updated.push('brand');
   }
 
+  if (extracted.type === 'content_calendar' && extracted.delivery?.weeks?.length) {
+    const existing = await q.tabData(clientKey, 'delivery');
+    const del = existing ? JSON.parse(existing.data) : {};
+    del.weeks = extracted.delivery.weeks;
+    await q.upsertTab(clientKey, 'delivery', JSON.stringify(del));
+    updated.push('delivery');
+  }
+
   if (extracted.type === 'strategy') {
     if (extracted.strategy) {
       await q.upsertTab(clientKey, 'strategy', JSON.stringify(extracted.strategy));
@@ -307,7 +344,7 @@ app.post('/api/clients/:key/upload', requireAuth, upload.single('pdf'), async (r
     const extracted = await extractPDF(req.file.buffer);
     const updated = await applyExtraction(req.params.key, extracted);
 
-    const typeLabels = { planable: 'Planable report', scorecard: 'Digital Credibility Scorecard', strategy: 'Strategy document' };
+    const typeLabels = { planable: 'Planable report', scorecard: 'Digital Credibility Scorecard', strategy: 'Strategy document', content_calendar: 'Content calendar' };
     res.json({
       ok: true,
       type: extracted.type,

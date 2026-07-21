@@ -1273,21 +1273,22 @@ function calcDeliveryScores(d) {
   const websitePct   = calcSectionPct(d.website);
   const brandPct     = calcSectionPct(d.brand);
 
-  // Monthly: points-weighted, tasks dated in current month
-  // Done = earned pts | Overdue (past date, not done) = 0 earned + tracked separately | Future = 0 earned yet
+  // Monthly: points-weighted
+  // Rules: tasks with a date in current month, OR tasks with no date at all (undated = current work)
+  // Tasks with a date explicitly in a past/future month are excluded
   const allTasks = [...contentTasks, ...(d.website||[]), ...(d.brand||[])];
   let monthTotal=0, monthDone=0, monthOverdue=0;
   allTasks.forEach(t => {
     if (!t.text) return;
     const date = parseTaskDate(t.date);
-    if (date && date >= startOfMonth && date <= endOfMonth) {
-      const pts = taskPts(t);
-      monthTotal += pts;
-      if (isDone(t)) {
-        monthDone += pts;
-      } else if (date < now) {
-        monthOverdue += pts;
-      }
+    const inScope = !date || (date >= startOfMonth && date <= endOfMonth);
+    if (!inScope) return;
+    const pts = taskPts(t);
+    monthTotal += pts;
+    if (isDone(t)) {
+      monthDone += pts;
+    } else if (date && date < now) {
+      monthOverdue += pts;
     }
   });
   const monthPct = monthTotal > 0 ? Math.round(monthDone/monthTotal*100) : null;
@@ -1311,11 +1312,17 @@ function updateDeliveryScoreBadges(d) {
   const dsEl = document.getElementById('ch-ds');
   const qEl = document.getElementById('ch-quarterly');
 
+  // Check if any website/brand tasks are still at default 1pt (unrated)
+  const unratedCount = [...(d.website||[]),...(d.brand||[])].filter(t=>t.text&&!(t.points>1)).length;
+  const totalWb = [...(d.website||[]),...(d.brand||[])].filter(t=>t.text).length;
+  const allRated = totalWb===0 || unratedCount===0;
+
   // Delivery score = live monthly score, points-weighted, date-aware
   if (monthPct !== null) {
     const [bg, col] = scoreColor(monthOverdue > 0 ? Math.min(monthPct, 49) : monthPct);
     let label = 'Delivery: ' + monthPct + '% · ' + monthDone + '/' + monthTotal + ' pts';
     if (monthOverdue > 0) label += ' · ⚠ ' + monthOverdue + ' pts overdue';
+    if (!allRated) label += ' · ' + unratedCount + ' task' + (unratedCount>1?'s':'')+' unrated';
     dsEl.textContent = label;
     dsEl.style.background = bg; dsEl.style.color = col; dsEl.style.display = '';
     // Also update sidebar score for this client

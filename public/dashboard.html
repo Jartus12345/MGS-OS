@@ -88,6 +88,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tdesc-btn:hover{background:var(--border);color:var(--text-primary)}
 .tdesc-panel{display:none;font-size:11px;color:var(--text-tertiary);line-height:1.5;padding:4px 0 8px 24px}
 .tdesc-panel.open{display:block}
+.pts-pip{display:inline-flex;gap:3px;flex-shrink:0}
+.pts-pip span{width:10px;height:10px;border-radius:2px;cursor:pointer;border:1.5px solid var(--border-md);transition:background .1s,border-color .1s}
+.pts-pip span.on{border-color:transparent}
 .tbadge{font-size:10px;padding:2px 6px;border-radius:8px;font-weight:500;white-space:nowrap;flex-shrink:0}
 .mrow{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border)}
 .mrow:last-child{border-bottom:none}
@@ -356,6 +359,41 @@ async function toggleDeliveryTask(tid){
   // Re-render delivery tab in place
   document.getElementById('page-content').innerHTML=renderTab('delivery',d);
 }
+async function setTaskPts(tid, pts){
+  if(!currentClient||!currentTabData)return;
+  const d=currentTabData;
+  let found=false;
+  if(tid.startsWith('web')){
+    const t=d.website?.[parseInt(tid.slice(3))];
+    if(t){t.points=pts;found=true;}
+  } else if(tid.startsWith('brd')){
+    const t=d.brand?.[parseInt(tid.slice(3))];
+    if(t){t.points=pts;found=true;}
+  }
+  if(!found)return;
+  api(`/api/clients/${currentClient}/tabs/delivery`,'PUT',d).catch(()=>{});
+  updateDeliveryScoreBadges(d);
+  pushCascade(d);
+  document.getElementById('page-content').innerHTML=renderTab('delivery',d);
+}
+// Periodic overdue refresh — re-check dates every 5 minutes without a page reload
+setInterval(()=>{
+  if(currentClient&&currentTabData&&currentTab==='delivery'){
+    const {data:updated,changed}=autoMarkOverdue(currentTabData);
+    if(changed){
+      currentTabData=updated;
+      api(`/api/clients/${currentClient}/tabs/delivery`,'PUT',updated).catch(()=>{});
+      updateDeliveryScoreBadges(updated);
+      document.getElementById('page-content').innerHTML=renderTab('delivery',updated);
+    } else {
+      // Re-render anyway so live date comparison in renderDelivery stays accurate
+      document.getElementById('page-content').innerHTML=renderTab('delivery',currentTabData);
+    }
+  }
+  if(currentClient&&currentTabData&&currentTab!=='delivery'){
+    refreshDeliveryScores();
+  }
+}, 5*60*1000);
 function progressBar(label,p,color,valHtml){
   return `<div class="pw">
     <div class="pl"><span>${esc(label)}</span>${valHtml}</div>
@@ -581,13 +619,52 @@ function renderSprints(d){
   }).join('');
 }
 
-function renderDelivery(d){
-  const overdueCount=d.overdue_count||0;
-  const bannerClass=overdueCount===0?'overdue-banner ok':'overdue-banner';
-  const bannerIcon=overdueCount===0?'ti-circle-check':'ti-alert-triangle';
-  const bannerText=overdueCount===0?'0 overdue tasks · All delivery on track':`${overdueCount} overdue task${overdueCount>1?'s':''} — action required`;
+// Pip-style 1-5 importance selector for website/brand tasks
+function pipRow(t, tid) {
+  const pts = t.points||1;
+  const isDone = t.done||t.status==='done';
+  const isOver = t.status==='over' && !isDone;
+  const cls = isDone?'done':isOver?'over':'';
+  const date = t.date?`<span class="tdate">${esc(t.date)}</span>`:'';
+  const descId = tid?`tdesc-${tid}`:'';
+  const descBtn = t.desc&&tid?`<span class="tdesc-btn" onclick="toggleDesc('${descId}')">Details</span>`:'';
+  const descPanel = t.desc&&tid?`<div class="tdesc-panel" id="${descId}">${esc(t.desc)}</div>`:'';
+  // Colour scale: 1=grey, 2=blue, 3=amber, 4=green-light, 5=green
+  const pipCols=['#C4C2BC','#5B9BD5','#EF9F27','#77B85C','#27500A'];
+  const pips=Array.from({length:5},(_,i)=>{
+    const on=i<pts;
+    const col=on?pipCols[pts-1]:'';
+    return `<span class="${on?'on':''}" style="${on?`background:${col};border-color:${col}`:''}" onclick="setTaskPts('${tid}',${i+1})" title="${i+1}pt importance"></span>`;
+  }).join('');
+  return `<div class="trow-wrap">
+    <div class="trow">
+      <div class="${ckClass(isDone?'done':t.status)}" onclick="toggleDeliveryTask('${tid}')" title="Mark ${isDone?'incomplete':'complete'}"></div>
+      <span class="tn ${cls}" onclick="toggleDeliveryTask('${tid}')">${esc(t.text)}</span>
+      <div class="pts-pip">${pips}</div>
+      ${date}${descBtn}
+    </div>${descPanel}
+  </div>`;
+}
 
-  const weeks=(d.weeks||[
+function renderDelivery(d){
+  // Always compute overdue live from current date at render time
+  const now=new Date(); now.setHours(0,0,0,0);
+  let liveOverdue=0;
+  function liveStatus(t){
+    if(t.done||t.status==='done') return 'done';
+    const dt=parseTaskDate(t.date);
+    if(dt&&dt<now) { liveOverdue++; return 'over'; }
+    return t.status||'';
+  }
+  const weeksLive=(d.weeks||[]).map(w=>({...w,tasks:(w.tasks||[]).map(t=>({...t,status:liveStatus(t)}))}));
+  const websiteLive=(d.website||[]).map(t=>({...t,status:liveStatus(t)}));
+  const brandLive=(d.brand||[]).map(t=>({...t,status:liveStatus(t)}));
+
+  const bannerClass=liveOverdue===0?'overdue-banner ok':'overdue-banner';
+  const bannerIcon=liveOverdue===0?'ti-circle-check':'ti-alert-triangle';
+  const bannerText=liveOverdue===0?'0 overdue tasks · All delivery on track':`${liveOverdue} overdue task${liveOverdue>1?'s':''} — action required`;
+
+  const weeks=(weeksLive.length?weeksLive:[
     {label:'Week 1',tasks:[]},{label:'Week 2',tasks:[]},
     {label:'Week 3',tasks:[]},{label:'Week 4',tasks:[]}
   ]).map((w,wi)=>`<div>
@@ -595,20 +672,20 @@ function renderDelivery(d){
     ${w.tasks.map((t,ti)=>taskRow(t,false,`wk${wi}t${ti}`)).join('')||'<div class="no-data">No tasks yet.</div>'}
   </div>`).join('');
 
-  const website=(d.website||[]).map((t,i)=>taskRow(t,true,`web${i}`)).join('')||'<div class="no-data">No website tasks yet.</div>';
-  const brand=(d.brand||[]).map((t,i)=>taskRow(t,true,`brd${i}`)).join('')||'<div class="no-data">No brand tasks yet.</div>';
+  const website=websiteLive.map((t,i)=>pipRow(t,`web${i}`)).join('')||'<div class="no-data">No website tasks yet. Upload a website brief PDF or use Edit data.</div>';
+  const brand=brandLive.map((t,i)=>pipRow(t,`brd${i}`)).join('')||'<div class="no-data">No brand tasks yet. Upload a brand brief PDF or use Edit data.</div>';
 
   return `<div class="${bannerClass}">
     <i class="ti ${bannerIcon} ob-icon"></i>
     <span class="ob-text">${bannerText}</span>
   </div>
-  <div class="sec-hdr">Content calendar</div>
+  <div class="sec-hdr">Content calendar <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Posts · 1pt each</span></div>
   <div class="card" style="margin-bottom:12px">
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${weeks}</div>
   </div>
-  <div class="sec-hdr">Website</div>
+  <div class="sec-hdr">Website tasks <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Tap pips to set importance 1–5</span></div>
   <div class="card" style="margin-bottom:12px">${website}</div>
-  <div class="sec-hdr">Brand</div>
+  <div class="sec-hdr">Brand tasks <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Tap pips to set importance 1–5</span></div>
   <div class="card">${brand}</div>`;
 }
 

@@ -340,33 +340,28 @@ function toggleDesc(id){
   if(el)el.classList.toggle('open');
 }
 async function toggleDeliveryTask(tid){
-  if(!currentClient||!currentTabData)return;
-  const d=currentTabData;
+  if(!currentClient)return;
+  // Always fetch fresh to avoid stale state
+  const d=await api(`/api/clients/${currentClient}/tabs/delivery`);
   let found=false;
-  // Parse tid: wk0t1 → week 0 task 1, web2 → website[2], brd2 → brand[2]
   if(tid.startsWith('wk')){
     const m=tid.match(/wk(\d+)t(\d+)/);
+    if(!m)return;
     const wi=parseInt(m[1]),ti=parseInt(m[2]);
     const t=d.weeks?.[wi]?.tasks?.[ti];
-    if(t){const done=!(t.done||t.status==='done');t.status=done?'done':'';t.done=done;found=true;}
+    if(t){const done=!isDone(t);t.status=done?'done':'';t.done=done;found=true;}
   } else if(tid.startsWith('web')){
-    const i=parseInt(tid.slice(3));
-    const t=d.website?.[i];
-    if(t){const done=!(t.done||t.status==='done');t.status=done?'done':'';t.done=done;found=true;}
+    const t=d.website?.[parseInt(tid.slice(3))];
+    if(t){const done=!isDone(t);t.status=done?'done':'';t.done=done;found=true;}
   } else if(tid.startsWith('brd')){
-    const i=parseInt(tid.slice(3));
-    const t=d.brand?.[i];
-    if(t){const done=!(t.done||t.status==='done');t.status=done?'done':'';t.done=done;found=true;}
+    const t=d.brand?.[parseInt(tid.slice(3))];
+    if(t){const done=!isDone(t);t.status=done?'done':'';t.done=done;found=true;}
   }
   if(!found)return;
-  // Recalc overdue count
-  const all=[...(d.weeks||[]).flatMap(w=>w.tasks||[]),...(d.website||[]),...(d.brand||[])];
-  d.overdue_count=all.filter(t=>t.status==='over').length;
-  // Save, update badges, cascade
+  currentTabData=d;
   api(`/api/clients/${currentClient}/tabs/delivery`,'PUT',d).catch(()=>{});
   updateDeliveryScoreBadges(d);
   pushCascade(d);
-  // Re-render delivery tab in place
   document.getElementById('page-content').innerHTML=renderTab('delivery',d);
 }
 // Add-task form helpers
@@ -426,8 +421,8 @@ function addBrandTask(){
   saveDelivery(d);
 }
 async function setTaskPts(tid, pts){
-  if(!currentClient||!currentTabData)return;
-  const d=currentTabData;
+  if(!currentClient)return;
+  const d=await api(`/api/clients/${currentClient}/tabs/delivery`);
   let found=false;
   if(tid.startsWith('web')){
     const t=d.website?.[parseInt(tid.slice(3))];
@@ -437,9 +432,9 @@ async function setTaskPts(tid, pts){
     if(t){t.points=pts;found=true;}
   }
   if(!found)return;
+  currentTabData=d;
   api(`/api/clients/${currentClient}/tabs/delivery`,'PUT',d).catch(()=>{});
   updateDeliveryScoreBadges(d);
-  pushCascade(d);
   document.getElementById('page-content').innerHTML=renderTab('delivery',d);
 }
 // Periodic overdue refresh — re-check dates every 5 minutes without a page reload
@@ -1366,8 +1361,8 @@ function parseTaskDate(dateStr) {
   return isNaN(d) ? null : d;
 }
 
-function taskPts(t){ return t.points||1; }
-function isDone(t){ return t.status==='done'||t.done===true; }
+function taskPts(t){ return Math.max(1, parseInt(t.points)||1); }
+function isDone(t){ return t.status==='done'||!!t.done; }
 
 function calcSectionPct(tasks) {
   const valid = (tasks||[]).filter(t => t.text);
@@ -1388,23 +1383,26 @@ function calcDeliveryScores(d) {
   const websitePct   = calcSectionPct(d.website);
   const brandPct     = calcSectionPct(d.brand);
 
-  // Monthly: points-weighted
-  // Rules: tasks with a date in current month, OR tasks with no date at all (undated = current work)
-  // Tasks with a date explicitly in a past/future month are excluded
-  const allTasks = [...contentTasks, ...(d.website||[]), ...(d.brand||[])];
+  // Monthly delivery score:
+  // Content calendar posts: only count if dated in current month (fresh calendar uploaded each month)
+  // Website + brand tasks: ALWAYS count — they represent the current sprint's workload regardless of date
   let monthTotal=0, monthDone=0, monthOverdue=0;
-  allTasks.forEach(t => {
+  contentTasks.forEach(t => {
     if (!t.text) return;
     const date = parseTaskDate(t.date);
     const inScope = !date || (date >= startOfMonth && date <= endOfMonth);
     if (!inScope) return;
     const pts = taskPts(t);
     monthTotal += pts;
-    if (isDone(t)) {
-      monthDone += pts;
-    } else if (date && date < now) {
-      monthOverdue += pts;
-    }
+    if (isDone(t)) monthDone += pts;
+    else if (date && date < now) monthOverdue += pts;
+  });
+  [...(d.website||[]), ...(d.brand||[])].forEach(t => {
+    if (!t.text) return;
+    const pts = taskPts(t);
+    monthTotal += pts;
+    if (isDone(t)) monthDone += pts;
+    else { const date = parseTaskDate(t.date); if (date && date < now) monthOverdue += pts; }
   });
   const monthPct = monthTotal > 0 ? Math.round(monthDone/monthTotal*100) : null;
 

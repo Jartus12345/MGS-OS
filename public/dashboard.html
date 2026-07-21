@@ -91,6 +91,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pts-pip{display:inline-flex;gap:3px;flex-shrink:0}
 .pts-pip span{width:10px;height:10px;border-radius:2px;cursor:pointer;border:1.5px solid var(--border-md);transition:background .1s,border-color .1s}
 .pts-pip span.on{border-color:transparent}
+.add-task-row{display:flex;align-items:center;gap:7px;padding:8px 0 2px;flex-wrap:wrap}
+.add-task-row input,.add-task-row select{font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary);outline:none}
+.add-task-row input:focus,.add-task-row select:focus{border-color:#5B9BD5}
+.add-task-row .at-btn{font-size:11px;padding:5px 12px;border-radius:6px;border:none;background:#185FA5;color:#fff;cursor:pointer;font-weight:500;white-space:nowrap}
+.add-task-row .at-btn:hover{background:#0C447C}
+.add-task-row .at-cancel{font-size:11px;color:var(--text-tertiary);cursor:pointer;padding:4px 6px}
+.add-task-row .at-cancel:hover{color:var(--text-primary)}
+.add-task-trigger{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-tertiary);cursor:pointer;padding:7px 0 2px;user-select:none}
+.add-task-trigger:hover{color:var(--text-primary)}
+.add-task-trigger i{font-size:13px}
 .tbadge{font-size:10px;padding:2px 6px;border-radius:8px;font-weight:500;white-space:nowrap;flex-shrink:0}
 .mrow{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border)}
 .mrow:last-child{border-bottom:none}
@@ -358,6 +368,62 @@ async function toggleDeliveryTask(tid){
   pushCascade(d);
   // Re-render delivery tab in place
   document.getElementById('page-content').innerHTML=renderTab('delivery',d);
+}
+// Add-task form helpers
+function toggleAddForm(id){
+  const el=document.getElementById(id);
+  if(el)el.style.display=el.style.display==='none'?'block':'none';
+}
+// Pip selector state for add forms (keyed by prefix 'aw'/'ab')
+const _addPts={aw:1,ab:1};
+function setAddPip(prefix,v){
+  _addPts[prefix]=v;
+  const pipCols=['#C4C2BC','#5B9BD5','#EF9F27','#77B85C','#27500A'];
+  document.querySelectorAll(`.add-pip[data-id="${prefix}"]`).forEach(el=>{
+    const pv=parseInt(el.dataset.v);
+    const on=pv<=v;
+    el.style.background=on?pipCols[v-1]:'';
+    el.style.borderColor=on?pipCols[v-1]:'';
+  });
+}
+function saveDelivery(d){
+  api(`/api/clients/${currentClient}/tabs/delivery`,'PUT',d).catch(()=>{});
+  updateDeliveryScoreBadges(d);
+  pushCascade(d);
+  document.getElementById('page-content').innerHTML=renderTab('delivery',d);
+}
+function addPost(){
+  const title=(document.getElementById('ap-title')?.value||'').trim();
+  if(!title)return;
+  const wi=parseInt(document.getElementById('ap-week')?.value)||0;
+  const date=(document.getElementById('ap-date')?.value||'').trim();
+  const d=currentTabData;
+  if(!d.weeks)d.weeks=[{label:'Week 1',tasks:[]},{label:'Week 2',tasks:[]},{label:'Week 3',tasks:[]},{label:'Week 4',tasks:[]}];
+  if(!d.weeks[wi])d.weeks[wi]={label:`Week ${wi+1}`,tasks:[]};
+  d.weeks[wi].tasks.push({status:'',text:title,date,points:1});
+  saveDelivery(d);
+}
+function addWebTask(){
+  const title=(document.getElementById('aw-title')?.value||'').trim();
+  if(!title)return;
+  const date=(document.getElementById('aw-date')?.value||'').trim();
+  const pts=_addPts['aw']||1;
+  const d=currentTabData;
+  if(!d.website)d.website=[];
+  d.website.push({status:'',text:title,date,points:pts});
+  _addPts['aw']=1;
+  saveDelivery(d);
+}
+function addBrandTask(){
+  const title=(document.getElementById('ab-title')?.value||'').trim();
+  if(!title)return;
+  const date=(document.getElementById('ab-date')?.value||'').trim();
+  const pts=_addPts['ab']||1;
+  const d=currentTabData;
+  if(!d.brand)d.brand=[];
+  d.brand.push({status:'',text:title,date,points:pts});
+  _addPts['ab']=1;
+  saveDelivery(d);
 }
 async function setTaskPts(tid, pts){
   if(!currentClient||!currentTabData)return;
@@ -664,16 +730,23 @@ function renderDelivery(d){
   const bannerIcon=liveOverdue===0?'ti-circle-check':'ti-alert-triangle';
   const bannerText=liveOverdue===0?'0 overdue tasks · All delivery on track':`${liveOverdue} overdue task${liveOverdue>1?'s':''} — action required`;
 
-  const weeks=(weeksLive.length?weeksLive:[
+  const weekList=weeksLive.length?weeksLive:[
     {label:'Week 1',tasks:[]},{label:'Week 2',tasks:[]},
     {label:'Week 3',tasks:[]},{label:'Week 4',tasks:[]}
-  ]).map((w,wi)=>`<div>
+  ];
+  const weekOpts=weekList.map((w,i)=>`<option value="${i}">${esc(w.label)}</option>`).join('');
+  const weeks=weekList.map((w,wi)=>`<div>
     <div style="font-size:11px;font-weight:600;margin-bottom:8px;padding-bottom:6px;border-bottom:0.5px solid rgba(0,0,0,0.1)">${esc(w.label)}</div>
-    ${w.tasks.map((t,ti)=>taskRow(t,false,`wk${wi}t${ti}`)).join('')||'<div class="no-data">No tasks yet.</div>'}
+    ${w.tasks.map((t,ti)=>taskRow(t,false,`wk${wi}t${ti}`)).join('')||'<div class="no-data">No posts yet.</div>'}
   </div>`).join('');
 
-  const website=websiteLive.map((t,i)=>pipRow(t,`web${i}`)).join('')||'<div class="no-data">No website tasks yet. Upload a website brief PDF or use Edit data.</div>';
-  const brand=brandLive.map((t,i)=>pipRow(t,`brd${i}`)).join('')||'<div class="no-data">No brand tasks yet. Upload a brand brief PDF or use Edit data.</div>';
+  const website=websiteLive.map((t,i)=>pipRow(t,`web${i}`)).join('');
+  const brand=brandLive.map((t,i)=>pipRow(t,`brd${i}`)).join('');
+
+  // Pip selector for add forms
+  function addPips(id){
+    return Array.from({length:5},(_,i)=>`<span class="add-pip" data-id="${id}" data-v="${i+1}" onclick="setAddPip('${id}',${i+1})" title="${i+1}pt" style="display:inline-block;width:10px;height:10px;border-radius:2px;border:1.5px solid var(--border-md);cursor:pointer;margin-right:2px;vertical-align:middle"></span>`).join('');
+  }
 
   return `<div class="${bannerClass}">
     <i class="ti ${bannerIcon} ob-icon"></i>
@@ -682,11 +755,53 @@ function renderDelivery(d){
   <div class="sec-hdr">Content calendar <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Posts · 1pt each</span></div>
   <div class="card" style="margin-bottom:12px">
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${weeks}</div>
+    <div style="border-top:0.5px solid var(--border);margin-top:10px;padding-top:6px">
+      <div class="add-task-trigger" onclick="toggleAddForm('add-post-form')"><i class="ti ti-plus"></i> Add post</div>
+      <div id="add-post-form" style="display:none">
+        <div class="add-task-row">
+          <select id="ap-week" style="font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">${weekOpts}</select>
+          <input id="ap-title" type="text" placeholder="Post title…" style="flex:1;min-width:140px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
+          <input id="ap-date" type="text" placeholder="Date e.g. 28 Jul" style="width:90px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
+          <button class="at-btn" onclick="addPost()">Add</button>
+          <span class="at-cancel" onclick="toggleAddForm('add-post-form')">Cancel</span>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="sec-hdr">Website tasks <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Tap pips to set importance 1–5</span></div>
-  <div class="card" style="margin-bottom:12px">${website}</div>
-  <div class="sec-hdr">Brand tasks <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Tap pips to set importance 1–5</span></div>
-  <div class="card">${brand}</div>`;
+  <div class="sec-hdr">Website tasks <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Rate importance 1–5pt · tap pips</span></div>
+  <div class="card" style="margin-bottom:12px">
+    ${website||'<div class="no-data" style="margin-bottom:4px">No website tasks yet.</div>'}
+    <div style="${website?'border-top:0.5px solid var(--border);margin-top:6px;padding-top:6px':''}">
+      <div class="add-task-trigger" onclick="toggleAddForm('add-web-form')"><i class="ti ti-plus"></i> Add website task</div>
+      <div id="add-web-form" style="display:none">
+        <div class="add-task-row">
+          <input id="aw-title" type="text" placeholder="Task title…" style="flex:1;min-width:140px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
+          <input id="aw-date" type="text" placeholder="Due date (optional)" style="width:110px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
+          <span style="font-size:11px;color:var(--text-tertiary)">Importance:</span>
+          ${addPips('aw')}
+          <button class="at-btn" onclick="addWebTask()">Add</button>
+          <span class="at-cancel" onclick="toggleAddForm('add-web-form')">Cancel</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sec-hdr">Brand tasks <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Rate importance 1–5pt · tap pips</span></div>
+  <div class="card">
+    ${brand||'<div class="no-data" style="margin-bottom:4px">No brand tasks yet.</div>'}
+    <div style="${brand?'border-top:0.5px solid var(--border);margin-top:6px;padding-top:6px':''}">
+      <div class="add-task-trigger" onclick="toggleAddForm('add-brd-form')"><i class="ti ti-plus"></i> Add brand task</div>
+      <div id="add-brd-form" style="display:none">
+        <div class="add-task-row">
+          <input id="ab-title" type="text" placeholder="Task title…" style="flex:1;min-width:140px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
+          <input id="ab-date" type="text" placeholder="Due date (optional)" style="width:110px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
+          <span style="font-size:11px;color:var(--text-tertiary)">Importance:</span>
+          ${addPips('ab')}
+          <button class="at-btn" onclick="addBrandTask()">Add</button>
+          <span class="at-cancel" onclick="toggleAddForm('add-brd-form')">Cancel</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderProgress(d){

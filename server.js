@@ -805,13 +805,15 @@ app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
     const deliveryRow = await q.tabData(req.params.key, 'delivery');
     if (deliveryRow) {
       const d = JSON.parse(deliveryRow.data);
+      const todayKey = new Date().toISOString().substring(0,10);
       for (const week of (d.weeks || [])) {
         for (const t of (week.tasks || [])) {
           if (!t.text) continue;
           const plannedDate = parseEventDate(t.date);
           const date = plannedDate || (t.completed_at ? t.completed_at.substring(0,10) : null);
           if (!date) continue;
-          const status = (t.done||t.status==='done') ? 'done' : (t.status==='over' ? 'overdue' : 'pending');
+          const isDone = t.done || t.status === 'done';
+          const status = isDone ? 'done' : (plannedDate && plannedDate < todayKey) ? 'overdue' : 'pending';
           events.push({ date, type: 'post', label: t.text, status, planned_date: plannedDate||date,
             detail: { text: t.text, desc: t.desc||'', date: t.date||date, week_label: week.label||'', points: t.points||0, status, completed_at: t.completed_at||null } });
         }
@@ -821,7 +823,8 @@ app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
         const pd = parseEventDate(t.date);
         const date = pd || (t.completed_at ? t.completed_at.substring(0,10) : null);
         if (!date) continue;
-        const status = (t.done||t.status==='done') ? 'done' : (t.status==='over' ? 'overdue' : 'pending');
+        const isDone = t.done || t.status === 'done';
+        const status = isDone ? 'done' : (pd && pd < todayKey) ? 'overdue' : 'pending';
         events.push({ date, type: 'website', label: t.text, status, planned_date: pd||date,
           detail: { text: t.text, desc: t.desc||'', date: t.date||date, status, completed_at: t.completed_at||null } });
       }
@@ -830,7 +833,8 @@ app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
         const pd = parseEventDate(t.date);
         const date = pd || (t.completed_at ? t.completed_at.substring(0,10) : null);
         if (!date) continue;
-        const status = (t.done||t.status==='done') ? 'done' : (t.status==='over' ? 'overdue' : 'pending');
+        const isDone = t.done || t.status === 'done';
+        const status = isDone ? 'done' : (pd && pd < todayKey) ? 'overdue' : 'pending';
         events.push({ date, type: 'brand', label: t.text, status, planned_date: pd||date,
           detail: { text: t.text, desc: t.desc||'', date: t.date||date, status, completed_at: t.completed_at||null } });
       }
@@ -840,8 +844,12 @@ app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
     const stratRow = await q.tabData(req.params.key, 'strategy');
     if (stratRow) {
       const s = JSON.parse(stratRow.data);
-      if (s.next_meeting_booked) events.push({ date: s.next_meeting_booked, type: 'meeting', label: 'Client meeting', status: 'pending',
-        detail: { text: 'Client meeting', desc: s.next_meeting_notes||'', date: s.next_meeting_booked, status: 'pending', completed_at: null } });
+      if (s.next_meeting_booked) {
+        const today2 = new Date().toISOString().substring(0,10);
+        const mStatus = s.next_meeting_booked < today2 ? 'overdue' : 'pending';
+        events.push({ date: s.next_meeting_booked, type: 'meeting', label: 'Client meeting', status: mStatus, planned_date: s.next_meeting_booked,
+          detail: { text: 'Client meeting', desc: s.next_meeting_notes||'', date: s.next_meeting_booked, status: mStatus, completed_at: null } });
+      }
     }
 
     // Brand tab — scorecard date

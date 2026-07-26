@@ -265,7 +265,7 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .cal-day--today .cal-dn{color:#185FA5;font-weight:700}
 .cal-day--weekend{background:var(--bg-secondary)}
 .cal-dn{font-size:10px;font-weight:500;color:var(--text-tertiary);margin-bottom:2px;line-height:1}
-.cal-pill{font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;cursor:pointer;font-weight:500}
+.cal-pill{font-size:9px;border-radius:3px;padding:1px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.5;cursor:pointer;font-weight:600}
 .cal-pill:hover{filter:brightness(1.1)}
 .cal-pill--ready{text-shadow:0 1px 2px rgba(0,0,0,.28)}
 .cal-more{font-size:9px;color:var(--text-tertiary);padding:0 2px;line-height:1.4;cursor:pointer}
@@ -2187,8 +2187,8 @@ function calPill(ev, dateStr, idx){
   if(isReady){bg=`linear-gradient(135deg,${c.db} 50%,#fff 50%)`;col='#fff';border=`1.5px solid ${c.db}`;extraClass=' cal-pill--ready';}
   else if(isDone){bg=c.db;col=c.dc;border='none';}
   else if(isOver){bg='#E24B4A';col='#fff';border='none';}
-  else if(isDue){bg='transparent';col=c.pc;border=`1.5px dashed ${c.pb}`;}
-  else{bg='transparent';col=c.pc;border=`1.5px solid ${c.pb}`;}
+  else if(isDue){bg=`${c.pb}12`;col=c.pc;border=`1.5px dashed ${c.pb}`;}
+  else{bg=`${c.pb}12`;col=c.pc;border=`1.5px solid ${c.pb}`;}
   const short=ev.label.length>18?ev.label.substring(0,16)+'…':ev.label;
   const clickAttr = (dateStr!=null&&idx!=null) ? ` onclick="openCalEvent(event,'${dateStr}',${idx})"` : '';
   return `<div class="cal-pill${extraClass}" style="background:${bg};color:${col};border:${border}" title="${esc(ev.label)}"${clickAttr}>${esc(short)}</div>`;

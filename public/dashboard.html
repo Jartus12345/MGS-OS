@@ -111,6 +111,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .cr-cycle-warn{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;font-size:9px;margin-left:4px;flex-shrink:0;cursor:default}
 .cr-cycle-warn--overdue{background:#FCEBEB;color:#a32a23}
 .cr-cycle-warn--soon{background:#FEF3DC;color:#a46500}
+.mtg-card{border-radius:var(--radius-md);padding:10px 12px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;border:0.5px solid var(--border-md);background:var(--bg-secondary)}
+.mtg-card--booked{background:#EAF3DE;border-color:#C0DD97}
+.mtg-card--book-now{background:#FEF3DC;border-color:#F5D47A}
+.mtg-card--overdue{background:#fff1f0;border-color:#f2c0bc}
+.mtg-left{flex:1;min-width:0}
+.mtg-label{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:3px}
+.mtg-main{font-size:12px;font-weight:500;color:var(--text-primary)}
+.mtg-sub{font-size:11px;color:var(--text-tertiary);margin-top:2px}
+.mtg-btn{font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid var(--border-md);background:var(--bg-primary);color:var(--text-secondary);cursor:pointer;white-space:nowrap;flex-shrink:0}
+.mtg-btn:hover{background:var(--bg-secondary);color:var(--text-primary)}
+.mtg-input-row{display:flex;align-items:center;gap:6px;margin-top:6px}
+.mtg-input-row input{font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:4px 8px;background:var(--bg-primary);color:var(--text-primary);width:130px}
+.mtg-input-row button{font-size:11px;padding:4px 10px;border-radius:6px;border:none;background:#27500A;color:#fff;cursor:pointer}
+.mtg-input-row .mtg-cancel{background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:11px}
 .add-task-trigger{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-tertiary);cursor:pointer;padding:7px 0 2px;user-select:none}
 .add-task-trigger:hover{color:var(--text-primary)}
 .add-task-trigger i{font-size:13px}
@@ -430,6 +444,90 @@ function renderDocumentCycleStatus(cycle, label){
   }
   return '';
 }
+function renderMeetingCard(d){
+  // Next quarterly meeting: next quarter start (Jan, Apr, Jul, Oct)
+  const now=new Date(); now.setHours(0,0,0,0);
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const quarterStarts=[0,3,6,9];
+  const cm=now.getMonth();
+  let qm=quarterStarts.find(m=>m>cm);
+  let qy=now.getFullYear();
+  if(qm==null){qm=0;qy++;}
+  const meetingDue=new Date(qy,qm,1);
+  const bookBy=new Date(qy,qm-1<0?11:qm-1,1); // 1 month before
+  if(qm===0) bookBy.setFullYear(qy-1);
+
+  const meetingDueStr=fmtDate(meetingDue.toISOString());
+  const bookByStr=fmtDate(bookBy.toISOString());
+
+  const booked=d.next_meeting_booked||''; // ISO date string if booked
+  const daysToMeeting=Math.round((meetingDue-now)/(1000*60*60*24));
+  const daysToBookBy=Math.round((bookBy-now)/(1000*60*60*24));
+
+  let cardCls='mtg-card', statusLine='', mainLine='', subLine='', btnHtml='';
+
+  if(booked){
+    const bookedDate=new Date(booked);
+    cardCls='mtg-card mtg-card--booked';
+    mainLine=`Client meeting booked · <strong>${fmtDate(bookedDate.toISOString())}</strong>`;
+    subLine=`Next quarterly meeting · ${meetingDueStr}`;
+    btnHtml=`<button class="mtg-btn" onclick="toggleMeetingInput()">Change date</button>`;
+  } else if(daysToMeeting<0){
+    cardCls='mtg-card mtg-card--overdue';
+    mainLine=`Client meeting overdue · was due ${meetingDueStr}`;
+    subLine='Book the next quarterly meeting now';
+    btnHtml=`<button class="mtg-btn" onclick="toggleMeetingInput()">Book meeting</button>`;
+  } else if(daysToBookBy<=0){
+    cardCls='mtg-card mtg-card--book-now';
+    mainLine=`Book client meeting · due ${meetingDueStr}`;
+    subLine=`Booking window open — meet before ${meetingDueStr}`;
+    btnHtml=`<button class="mtg-btn" onclick="toggleMeetingInput()">Book meeting</button>`;
+  } else {
+    mainLine=`Next client meeting · ${meetingDueStr}`;
+    subLine=`Book by ${bookByStr} · ${daysToBookBy} day${daysToBookBy===1?'':'s'} to book`;
+    btnHtml=`<button class="mtg-btn" onclick="toggleMeetingInput()">Set date</button>`;
+  }
+
+  return `<div class="${cardCls}" id="mtg-card">
+    <div class="mtg-left">
+      <div class="mtg-label"><i class="ti ti-users" style="margin-right:3px"></i>Quarterly client meeting</div>
+      <div class="mtg-main">${mainLine}</div>
+      <div class="mtg-sub">${subLine}</div>
+      <div class="mtg-input-row" id="mtg-input-row" style="display:none">
+        <input type="date" id="mtg-date-input" value="${booked}">
+        <button onclick="saveMeetingDate()">Save</button>
+        <button class="mtg-cancel" onclick="toggleMeetingInput()">Cancel</button>
+      </div>
+    </div>
+    ${btnHtml}
+  </div>`;
+}
+
+function toggleMeetingInput(){
+  const row=document.getElementById('mtg-input-row');
+  if(row) row.style.display=row.style.display==='none'?'flex':'none';
+}
+
+async function saveMeetingDate(){
+  if(!currentClient)return;
+  const val=document.getElementById('mtg-date-input')?.value;
+  if(!val)return;
+  const d=await api(`/api/clients/${currentClient}/tabs/strategy`);
+  d.next_meeting_booked=val;
+  currentTabData=d;
+  await api(`/api/clients/${currentClient}/tabs/strategy`,'PUT',d);
+  document.getElementById('page-content').innerHTML=renderTab('strategy',d);
+}
+
+async function clearMeetingDate(){
+  if(!currentClient)return;
+  const d=await api(`/api/clients/${currentClient}/tabs/strategy`);
+  delete d.next_meeting_booked;
+  currentTabData=d;
+  await api(`/api/clients/${currentClient}/tabs/strategy`,'PUT',d);
+  document.getElementById('page-content').innerHTML=renderTab('strategy',d);
+}
+
 async function toggleDeliveryTask(tid){
   if(!currentClient)return;
   // Always fetch fresh to avoid stale state
@@ -794,7 +892,9 @@ function renderStrategy(d){
   ]).map(p=>progressBar(p.label,p.pct,p.color,`<span style="font-weight:500;color:${p.val_col}">${esc(p.val)}</span>`)).join('');
 
   const strategyCycle=renderDocumentCycleStatus(currentCycles.strategy,'Quarterly strategy');
-  return `${strategyCycle?`<div style="padding:0 0 2px">${strategyCycle}</div>`:''}
+  const meetingCard=renderMeetingCard(d);
+  return `${strategyCycle?`<div style="padding:0 0 6px">${strategyCycle}</div>`:''}
+  ${meetingCard?`<div style="margin-bottom:10px">${meetingCard}</div>`:''}
   <div class="g12">
     <div class="card"><div class="ct">Strategic hierarchy</div>${hier}</div>
     <div>

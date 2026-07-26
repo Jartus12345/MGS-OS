@@ -808,10 +808,11 @@ app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
       for (const week of (d.weeks || [])) {
         for (const t of (week.tasks || [])) {
           if (!t.text) continue;
-          const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
+          const plannedDate = parseEventDate(t.date);
+          const date = t.completed_at ? t.completed_at.substring(0,10) : (plannedDate||null);
           if (!date) continue;
           const status = (t.done||t.status==='done') ? 'done' : (t.status==='over' ? 'overdue' : 'pending');
-          events.push({ date, type: 'post', label: t.text, status,
+          events.push({ date, type: 'post', label: t.text, status, planned_date: plannedDate||date,
             detail: { text: t.text, desc: t.desc||'', date: t.date||date, week_label: week.label||'', points: t.points||0, status, completed_at: t.completed_at||null } });
         }
       }

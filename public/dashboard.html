@@ -266,7 +266,8 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .cal-day--weekend{background:var(--bg-secondary)}
 .cal-dn{font-size:10px;font-weight:500;color:var(--text-tertiary);margin-bottom:2px;line-height:1}
 .cal-pill{font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;cursor:pointer;font-weight:500}
-.cal-pill:hover{filter:brightness(1.12)}
+.cal-pill:hover{filter:brightness(1.1)}
+.cal-pill--ready{background:linear-gradient(135deg,#185FA5 50%,#fff 50%)!important;color:#fff!important;border:1.5px solid #185FA5!important;text-shadow:0 1px 2px rgba(0,0,0,.25)}
 .cal-more{font-size:9px;color:var(--text-tertiary);padding:0 2px;line-height:1.4;cursor:pointer}
 .cal-day--clickable{cursor:pointer}
 .cal-day--clickable:hover{border-color:#185FA5;background:var(--bg-secondary)}
@@ -2147,14 +2148,17 @@ function calPill(ev, dateStr, idx){
   const isDone=ev.status==='done';
   const isDue=ev.status==='due';
   const isOver=ev.status==='overdue';
-  let bg,col,border;
-  if(isDone){bg=c.db;col=c.dc;border='none';}
+  const todayStr=new Date().toISOString().substring(0,10);
+  const isReady=isDone && ev.type==='post' && ev.planned_date && ev.planned_date>todayStr;
+  let bg,col,border,extraClass='';
+  if(isReady){bg='';col='';border='';extraClass=' cal-pill--ready';}
+  else if(isDone){bg=c.db;col=c.dc;border='none';}
   else if(isOver){bg='#E24B4A';col='#fff';border='none';}
   else if(isDue){bg='transparent';col=c.pc;border=`1.5px dashed ${c.pb}`;}
   else{bg='transparent';col=c.pc;border=`1.5px solid ${c.pb}`;}
   const short=ev.label.length>18?ev.label.substring(0,16)+'…':ev.label;
   const clickAttr = (dateStr!=null&&idx!=null) ? ` onclick="openCalEvent(event,'${dateStr}',${idx})"` : '';
-  return `<div class="cal-pill" style="background:${bg};color:${col};border:${border}" title="${esc(ev.label)}"${clickAttr}>${esc(short)}</div>`;
+  return `<div class="cal-pill${extraClass}" style="background:${bg};color:${col};border:${border}" title="${esc(ev.label)}"${clickAttr}>${esc(short)}</div>`;
 }
 
 function buildCalendarHTML(year, month){
@@ -2203,7 +2207,8 @@ function buildCalendarHTML(year, month){
 
   const legend=`<div class="cal-legend">
     <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#185FA5"></span>Post done</span>
-    <span class="cal-leg-item"><span class="cal-leg-dot cal-leg-dot--outline" style="border-color:#185FA5"></span>Post scheduled</span>
+    <span class="cal-leg-item"><span class="cal-leg-dot" style="background:linear-gradient(135deg,#185FA5 50%,#fff 50%);border:1px solid #185FA5"></span>Post ready</span>
+    <span class="cal-leg-item"><span class="cal-leg-dot cal-leg-dot--outline" style="border-color:#185FA5"></span>Post due</span>
     <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#27500A"></span>Website</span>
     <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#6B248A"></span>Brand</span>
     <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#C07A00"></span>Meeting</span>
@@ -2250,8 +2255,8 @@ async function fetchDeliveryCalEvents(){
 
 const CAL_TYPE_LABELS = { post:'Post', website:'Website', brand:'Brand', meeting:'Meeting', scorecard:'Scorecard', strategy:'Strategy', report:'Report' };
 const CAL_TYPE_COLORS = { post:'#185FA5', website:'#27500A', brand:'#6B248A', meeting:'#C07A00', scorecard:'#6B4FBB', strategy:'#085041', report:'#5F5E5A' };
-const STATUS_LABELS = { done:'Done', pending:'Scheduled', overdue:'Overdue', due:'Due' };
-const STATUS_COLORS = { done:'#27500A', pending:'#185FA5', overdue:'#C0392B', due:'#C07A00' };
+const STATUS_LABELS = { done:'Done', ready:'Ready', pending:'Due', overdue:'Overdue', due:'Due' };
+const STATUS_COLORS = { done:'#27500A', ready:'#185FA5', pending:'#185FA5', overdue:'#C0392B', due:'#C07A00' };
 
 function openCalDay(dateStr, evtObj){
   if(evtObj) evtObj.stopPropagation();
@@ -2269,8 +2274,11 @@ function caldayListHTML(evs, dateStr){
   return evs.map((ev,i)=>{
     const typeCol = CAL_TYPE_COLORS[ev.type]||'#5F5E5A';
     const typeLabel = CAL_TYPE_LABELS[ev.type]||ev.type;
-    const statusCol = STATUS_COLORS[ev.status]||'#5F5E5A';
-    const statusLabel = STATUS_LABELS[ev.status]||ev.status;
+    const td=new Date().toISOString().substring(0,10);
+    const isR=ev.status==='done'&&ev.type==='post'&&ev.planned_date&&ev.planned_date>td;
+    const ds=isR?'ready':ev.status;
+    const statusCol = STATUS_COLORS[ds]||'#5F5E5A';
+    const statusLabel = STATUS_LABELS[ds]||ev.status;
     return `<div class="calday-ev-row" onclick="showCalEventDetail('${dateStr}',${i})">
       <div class="calday-ev-type" style="background:${typeCol}20;color:${typeCol}">${esc(typeLabel)}</div>
       <div style="flex:1;min-width:0">
@@ -2288,8 +2296,11 @@ function showCalEventDetail(dateStr, idx){
   if(!ev) return;
   const typeCol = CAL_TYPE_COLORS[ev.type]||'#5F5E5A';
   const typeLabel = CAL_TYPE_LABELS[ev.type]||ev.type;
-  const statusCol = STATUS_COLORS[ev.status]||'#5F5E5A';
-  const statusLabel = STATUS_LABELS[ev.status]||ev.status;
+  const todayStr2 = new Date().toISOString().substring(0,10);
+  const isReady2 = ev.status==='done' && ev.type==='post' && ev.planned_date && ev.planned_date>todayStr2;
+  const displayStatus = isReady2 ? 'ready' : ev.status;
+  const statusCol = STATUS_COLORS[displayStatus]||STATUS_COLORS[ev.status]||'#5F5E5A';
+  const statusLabel = STATUS_LABELS[displayStatus]||ev.status;
   const d = ev.detail||{};
   let meta = [];
   if(d.date) meta.push(`Planned: ${d.date}`);

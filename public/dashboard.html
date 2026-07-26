@@ -2129,14 +2129,23 @@ function quickPrompt(text){
 }
 
 function mdLite(text){
-  // Minimal markdown: bold, bullet lists
-  return text
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/^[\*\-]\s+(.+)$/gm,'<li>$1</li>')
-    .replace(/(<li>.*<\/li>)/gs,(match)=>'<ul>'+match+'</ul>')
-    .replace(/\n{2,}/g,'</p><p>')
-    .replace(/\n/g,'<br>');
+  // Escape HTML first
+  let s = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Bold-only lines (acting as section headers) → styled heading
+  s = s.replace(/^\*\*([^*\n]+)\*\*\s*$/gm,'<div style="font-weight:600;margin:10px 0 4px;font-size:12px">$1</div>');
+  // Inline bold
+  s = s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  // Numbered lists
+  s = s.replace(/^\d+\.\s+(.+)$/gm,'<li style="margin-bottom:3px">$1</li>');
+  // Bullet lists
+  s = s.replace(/^[\*\-]\s+(.+)$/gm,'<li style="margin-bottom:3px">$1</li>');
+  // Wrap consecutive <li> blocks in <ul>/<ol>
+  s = s.replace(/(<li[^>]*>[\s\S]*?<\/li>)(\s*<li[^>]*>[\s\S]*?<\/li>)*/g, match => '<ul style="padding-left:16px;margin:4px 0">'+match+'</ul>');
+  // Paragraph breaks
+  s = s.replace(/\n{2,}/g,'</p><p style="margin:6px 0">');
+  s = s.replace(/\n/g,'<br>');
+  return '<p style="margin:0">'+s+'</p>';
 }
 
 function appendChatMsg(role, html, id=''){

@@ -265,8 +265,35 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .cal-day--today .cal-dn{color:#185FA5;font-weight:700}
 .cal-day--weekend{background:var(--bg-secondary)}
 .cal-dn{font-size:10px;font-weight:500;color:var(--text-tertiary);margin-bottom:2px;line-height:1}
-.cal-pill{font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;cursor:default;font-weight:500}
-.cal-more{font-size:9px;color:var(--text-tertiary);padding:0 2px;line-height:1.4}
+.cal-pill{font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;cursor:pointer;font-weight:500}
+.cal-pill:hover{filter:brightness(1.12)}
+.cal-more{font-size:9px;color:var(--text-tertiary);padding:0 2px;line-height:1.4;cursor:pointer}
+.cal-day--clickable{cursor:pointer}
+.cal-day--clickable:hover{border-color:#185FA5;background:var(--bg-secondary)}
+
+/* Calendar day modal */
+.calday-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;display:flex;align-items:center;justify-content:center;padding:20px}
+.calday-modal{background:var(--bg-primary);border-radius:12px;width:100%;max-width:520px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
+.calday-hdr{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:0.5px solid var(--border-md)}
+.calday-hdr-title{font-size:15px;font-weight:700;flex:1}
+.calday-hdr-sub{font-size:11px;color:var(--text-secondary)}
+.calday-close{width:28px;height:28px;border-radius:6px;border:0.5px solid var(--border-md);background:var(--bg-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0}
+.calday-close:hover{background:var(--bg-tertiary)}
+.calday-body{overflow-y:auto;flex:1;padding:10px}
+.calday-ev-row{display:flex;align-items:flex-start;gap:10px;padding:10px 8px;border-radius:8px;cursor:pointer;border:0.5px solid transparent;transition:background .1s,border-color .1s}
+.calday-ev-row:hover{background:var(--bg-secondary);border-color:var(--border)}
+.calday-ev-type{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;flex-shrink:0}
+.calday-ev-text{font-size:13px;font-weight:600;line-height:1.35;flex:1}
+.calday-ev-meta{font-size:10px;color:var(--text-secondary);margin-top:2px}
+.calday-ev-arrow{color:var(--text-tertiary);font-size:13px;margin-top:3px;flex-shrink:0}
+.calday-back{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;padding:4px 0;border:none;background:none;margin-bottom:8px}
+.calday-back:hover{color:var(--text-primary)}
+.calday-detail-title{font-size:17px;font-weight:700;line-height:1.3;margin-bottom:8px}
+.calday-detail-badges{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.calday-detail-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;text-transform:uppercase;letter-spacing:.04em}
+.calday-detail-desc{font-size:13px;line-height:1.7;color:var(--text-secondary);white-space:pre-wrap;background:var(--bg-secondary);padding:12px;border-radius:8px}
+.calday-detail-meta{font-size:11px;color:var(--text-tertiary);margin-top:10px}
+.calday-empty{padding:24px;text-align:center;color:var(--text-tertiary);font-size:13px}
 
 /* Grace-period badge on completed tasks */
 .task-grace{font-size:9px;color:#4d6f24;background:#EAF3DE;border-radius:5px;padding:1px 6px;white-space:nowrap;flex-shrink:0}
@@ -387,6 +414,20 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
   <div class="loading">Select a client to get started</div>
 </div>
 </div>
+</div>
+
+<!-- Calendar day modal -->
+<div id="calday-overlay" class="calday-overlay" style="display:none" onclick="if(event.target===this)closeCalDay()">
+  <div class="calday-modal">
+    <div class="calday-hdr">
+      <div>
+        <div class="calday-hdr-title" id="calday-title"></div>
+        <div class="calday-hdr-sub" id="calday-sub"></div>
+      </div>
+      <button class="calday-close" onclick="closeCalDay()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="calday-body" id="calday-body"></div>
+  </div>
 </div>
 
 <!-- Archive history panel -->
@@ -2101,7 +2142,7 @@ const CAL_COLORS = {
   report:   {db:'#5F5E5A',dc:'#fff',pb:'#5F5E5A',pc:'#5F5E5A'},
 };
 
-function calPill(ev){
+function calPill(ev, dateStr, idx){
   const c=CAL_COLORS[ev.type]||CAL_COLORS.report;
   const isDone=ev.status==='done';
   const isDue=ev.status==='due';
@@ -2112,7 +2153,8 @@ function calPill(ev){
   else if(isDue){bg='transparent';col=c.pc;border=`1.5px dashed ${c.pb}`;}
   else{bg='transparent';col=c.pc;border=`1.5px solid ${c.pb}`;}
   const short=ev.label.length>18?ev.label.substring(0,16)+'…':ev.label;
-  return `<div class="cal-pill" style="background:${bg};color:${col};border:${border}" title="${esc(ev.label)}">${esc(short)}</div>`;
+  const clickAttr = (dateStr!=null&&idx!=null) ? ` onclick="openCalEvent(event,'${dateStr}',${idx})"` : '';
+  return `<div class="cal-pill" style="background:${bg};color:${col};border:${border}" title="${esc(ev.label)}"${clickAttr}>${esc(short)}</div>`;
 }
 
 function buildCalendarHTML(year, month){
@@ -2146,9 +2188,10 @@ function buildCalendarHTML(year, month){
     const isWeekend=dow===0||dow===6;
     const evs=byDate[dateStr]||[];
     const noPast=isPast&&!evs.length&&!isToday;
-    const pills=evs.slice(0,3).map(calPill).join('');
-    const more=evs.length>3?`<div class="cal-more">+${evs.length-3}</div>`:'';
-    cells+=`<div class="cal-day${isToday?' cal-day--today':''}${isWeekend?' cal-day--weekend':''}${noPast?' cal-day--dim':''}">
+    const hasClick=evs.length>0;
+    const pills=evs.slice(0,3).map((ev,i)=>calPill(ev,dateStr,i)).join('');
+    const more=evs.length>3?`<div class="cal-more" onclick="openCalDay('${dateStr}')" title="Show all ${evs.length} events">+${evs.length-3} more</div>`:'';
+    cells+=`<div class="cal-day${isToday?' cal-day--today':''}${isWeekend?' cal-day--weekend':''}${noPast?' cal-day--dim':''}${hasClick?' cal-day--clickable':''}" ${hasClick?`onclick="openCalDay('${dateStr}')"`:''}>
       <div class="cal-dn">${d}</div>${pills}${more}
     </div>`;
   }
@@ -2203,7 +2246,84 @@ async function fetchDeliveryCalEvents(){
   }catch(e){}
 }
 
-// ── Archive browser ────────────────────────────────────────────────────────────────────
+// ── Calendar day modal ─────────────────────────────────────────────────────────────────
+
+const CAL_TYPE_LABELS = { post:'Post', website:'Website', brand:'Brand', meeting:'Meeting', scorecard:'Scorecard', strategy:'Strategy', report:'Report' };
+const CAL_TYPE_COLORS = { post:'#185FA5', website:'#27500A', brand:'#6B248A', meeting:'#C07A00', scorecard:'#6B4FBB', strategy:'#085041', report:'#5F5E5A' };
+const STATUS_LABELS = { done:'Done', pending:'Scheduled', overdue:'Overdue', due:'Due' };
+const STATUS_COLORS = { done:'#27500A', pending:'#185FA5', overdue:'#C0392B', due:'#C07A00' };
+
+function openCalDay(dateStr, evtObj){
+  if(evtObj) evtObj.stopPropagation();
+  const evs = calEvents.filter(e=>e.date===dateStr);
+  const d = new Date(dateStr+'T12:00:00');
+  const dayLabel = d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('calday-title').textContent = dayLabel;
+  document.getElementById('calday-sub').textContent = `${evs.length} event${evs.length!==1?'s':''}`;
+  document.getElementById('calday-body').innerHTML = caldayListHTML(evs, dateStr);
+  document.getElementById('calday-overlay').style.display='flex';
+}
+
+function caldayListHTML(evs, dateStr){
+  if(!evs.length) return `<div class="calday-empty">No events on this day</div>`;
+  return evs.map((ev,i)=>{
+    const typeCol = CAL_TYPE_COLORS[ev.type]||'#5F5E5A';
+    const typeLabel = CAL_TYPE_LABELS[ev.type]||ev.type;
+    const statusCol = STATUS_COLORS[ev.status]||'#5F5E5A';
+    const statusLabel = STATUS_LABELS[ev.status]||ev.status;
+    return `<div class="calday-ev-row" onclick="showCalEventDetail('${dateStr}',${i})">
+      <div class="calday-ev-type" style="background:${typeCol}20;color:${typeCol}">${esc(typeLabel)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="calday-ev-text">${esc(ev.label)}</div>
+        <div class="calday-ev-meta" style="color:${statusCol}">${esc(statusLabel)}</div>
+      </div>
+      <i class="ti ti-chevron-right calday-ev-arrow"></i>
+    </div>`;
+  }).join('');
+}
+
+function showCalEventDetail(dateStr, idx){
+  const evs = calEvents.filter(e=>e.date===dateStr);
+  const ev = evs[idx];
+  if(!ev) return;
+  const typeCol = CAL_TYPE_COLORS[ev.type]||'#5F5E5A';
+  const typeLabel = CAL_TYPE_LABELS[ev.type]||ev.type;
+  const statusCol = STATUS_COLORS[ev.status]||'#5F5E5A';
+  const statusLabel = STATUS_LABELS[ev.status]||ev.status;
+  const d = ev.detail||{};
+  let meta = [];
+  if(d.date) meta.push(`Planned: ${d.date}`);
+  if(d.week_label) meta.push(`Week: ${d.week_label}`);
+  if(d.completed_at) meta.push(`Completed: ${new Date(d.completed_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`);
+  if(d.points) meta.push(`Points: ${d.points}`);
+  document.getElementById('calday-body').innerHTML = `
+    <button class="calday-back" onclick="openCalDay('${dateStr}')"><i class="ti ti-arrow-left"></i> Back to day</button>
+    <div class="calday-detail-title">${esc(ev.label)}</div>
+    <div class="calday-detail-badges">
+      <span class="calday-detail-badge" style="background:${typeCol}20;color:${typeCol}">${esc(typeLabel)}</span>
+      <span class="calday-detail-badge" style="background:${statusCol}20;color:${statusCol}">${esc(statusLabel)}</span>
+    </div>
+    ${d.desc ? `<div class="calday-detail-desc">${esc(d.desc)}</div>` : ''}
+    ${meta.length ? `<div class="calday-detail-meta">${meta.join(' · ')}</div>` : ''}
+  `;
+}
+
+function openCalEvent(evtObj, dateStr, idx){
+  evtObj.stopPropagation();
+  document.getElementById('calday-overlay').style.display='flex';
+  showCalEventDetail(dateStr, idx);
+  // Set header
+  const evs = calEvents.filter(e=>e.date===dateStr);
+  const d = new Date(dateStr+'T12:00:00');
+  document.getElementById('calday-title').textContent = d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('calday-sub').textContent = `${evs.length} event${evs.length!==1?'s':''}`;
+}
+
+function closeCalDay(){
+  document.getElementById('calday-overlay').style.display='none';
+}
+
+// ── Archive browser ─────────────────────────────────────────────────────────────────────
 let archiveMonths = [];
 let archiveSelectedMonth = null;
 

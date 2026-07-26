@@ -781,6 +781,126 @@ async function snapshotTabToArchive(clientKey, tabName, category) {
   }
 }
 
+// ── Delivery calendar events ─────────────────────────────────────────────────────
+function parseEventDate(dateStr) {
+  if (!dateStr) return null;
+  const MO = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12,
+    january:1,february:2,march:3,april:4,june:6,july:7,august:8,september:9,october:10,november:11,december:12};
+  const s = String(dateStr).trim().toLowerCase();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  let m = s.match(/^(\d{1,2})\s+([a-z]+)\s+(\d{4})$/);
+  if (m) { const mo=MO[m[2].substring(0,3)]; if(mo) return `${m[3]}-${String(mo).padStart(2,'0')}-${String(parseInt(m[1])).padStart(2,'0')}`; }
+  m = s.match(/^(\d{1,2})\s+([a-z]{3,})$/);
+  if (m) { const mo=MO[m[2].substring(0,3)]; if(mo) return `${new Date().getFullYear()}-${String(mo).padStart(2,'0')}-${String(parseInt(m[1])).padStart(2,'0')}`; }
+  m = s.match(/^([a-z]{3,})\s+(\d{4})$/);
+  if (m) { const mo=MO[m[1].substring(0,3)]; if(mo) return `${m[2]}-${String(mo).padStart(2,'0')}-01`; }
+  return null;
+}
+
+app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
+  try {
+    const events = [];
+
+    // Active delivery tab
+    const deliveryRow = await q.tabData(req.params.key, 'delivery');
+    if (deliveryRow) {
+      const d = JSON.parse(deliveryRow.data);
+      for (const week of (d.weeks || [])) {
+        for (const t of (week.tasks || [])) {
+          if (!t.text) continue;
+          const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
+          if (!date) continue;
+          const status = (t.done||t.status==='done') ? 'done' : (t.status==='over' ? 'overdue' : 'pending');
+          events.push({ date, type: 'post', label: t.text, status });
+        }
+      }
+      for (const t of (d.website || [])) {
+        if (!t.text) continue;
+        const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
+        if (!date) continue;
+        const status = (t.done||t.status==='done') ? 'done' : (t.status==='over' ? 'overdue' : 'pending');
+        events.push({ date, type: 'website', label: t.text, status });
+      }
+      for (const t of (d.brand || [])) {
+        if (!t.text) continue;
+        const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
+        if (!date) continue;
+        const status = (t.done||t.status==='done') ? 'done' : (t.status==='over' ? 'overdue' : 'pending');
+        events.push({ date, type: 'brand', label: t.text, status });
+      }
+    }
+
+    // Strategy tab — meeting
+    const stratRow = await q.tabData(req.params.key, 'strategy');
+    if (stratRow) {
+      const s = JSON.parse(stratRow.data);
+      if (s.next_meeting_booked) events.push({ date: s.next_meeting_booked, type: 'meeting', label: 'Client meeting', status: 'pending' });
+    }
+
+    // Brand tab — scorecard date
+    const brandRow = await q.tabData(req.params.key, 'brand');
+    if (brandRow) {
+      const b = JSON.parse(brandRow.data);
+      if (b.scorecard_date) {
+        const date = parseEventDate(b.scorecard_date);
+        if (date) events.push({ date, type: 'scorecard', label: 'Digital Credibility Scorecard', status: 'done' });
+      }
+    }
+
+    // Archive — past content calendars, website/brand tasks, snapshots
+    const months = await q.listArchiveMonths(req.params.key);
+    for (const month of months) {
+      const rows = await q.getArchive(req.params.key, month);
+      for (const row of rows) {
+        if (row.category === 'content_calendar') {
+          for (const cal of (row.data || [])) {
+            for (const week of (cal.weeks || [])) {
+              for (const t of (week.tasks || [])) {
+                if (!t.text) continue;
+                const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
+                if (!date) continue;
+                events.push({ date, type: 'post', label: t.text, status: 'done' });
+              }
+            }
+          }
+        }
+        if (row.category === 'website_tasks') {
+          for (const t of (row.data || [])) {
+            const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
+            if (date && t.text) events.push({ date, type: 'website', label: t.text, status: 'done' });
+          }
+        }
+        if (row.category === 'brand_tasks') {
+          for (const t of (row.data || [])) {
+            const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
+            if (date && t.text) events.push({ date, type: 'brand', label: t.text, status: 'done' });
+          }
+        }
+        if (row.category === 'strategy_snapshot') {
+          const date = String(row.archived_at).substring(0,10);
+          if (date) events.push({ date, type: 'strategy', label: 'Strategy document', status: 'done' });
+        }
+        if (row.category === 'scorecard_snapshot') {
+          const date = String(row.archived_at).substring(0,10);
+          if (date) events.push({ date, type: 'scorecard', label: 'Scorecard (archived)', status: 'done' });
+        }
+      }
+    }
+
+    // Document cycle due dates
+    const cycles = await q.docCycles(req.params.key);
+    for (const c of cycles) {
+      if (!c.next_due_at) continue;
+      const date = String(c.next_due_at).substring(0,10);
+      const typeMap = { content_calendar: 'post', strategy: 'strategy', scorecard: 'scorecard', planable_report: 'report' };
+      const labelMap = { content_calendar: 'Content calendar due', strategy: 'Strategy review due', scorecard: 'Scorecard due', planable_report: 'Planable report due' };
+      events.push({ date, type: typeMap[c.document_type]||'report', label: labelMap[c.document_type]||'Due', status: 'due' });
+    }
+
+    res.json({ events });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Archive API endpoints ────────────────────────────────────────────────────────
 app.get('/api/clients/:key/archive', requireAuth, async (req, res) => {
   try {

@@ -245,6 +245,29 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .cc-input-row button{font-size:11px;padding:4px 10px;border-radius:6px;border:none;background:#1a1a18;color:#fff;cursor:pointer}
 .cc-input-row .cc-cancel{background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:11px}
 
+/* Delivery calendar */
+.cal-wrap{margin-bottom:16px}
+.cal-nav{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.cal-nav-title{font-size:14px;font-weight:600;flex:1;text-align:center}
+.cal-nav-btn{background:var(--bg-primary);border:0.5px solid var(--border-md);border-radius:7px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0}
+.cal-nav-btn:hover{background:var(--bg-secondary)}
+.cal-nav-btn i{font-size:14px}
+.cal-legend{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;font-size:10px;color:var(--text-secondary);padding:7px 10px;background:var(--bg-secondary);border-radius:var(--radius-md)}
+.cal-leg-item{display:flex;align-items:center;gap:4px}
+.cal-leg-dot{width:8px;height:8px;border-radius:3px;flex-shrink:0}
+.cal-leg-dot--outline{background:transparent!important;border:1.5px solid}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.cal-dow{font-size:9px;font-weight:600;color:var(--text-tertiary);text-align:center;padding:3px 0 5px;letter-spacing:.05em;text-transform:uppercase}
+.cal-day{min-height:76px;border:0.5px solid var(--border);border-radius:5px;padding:4px 5px;background:var(--bg-primary);display:flex;flex-direction:column;gap:2px;transition:border-color .1s}
+.cal-day--empty{background:transparent;border-color:transparent;min-height:0}
+.cal-day--dim{opacity:.45}
+.cal-day--today{border-color:#185FA5;background:#EBF4FF}
+.cal-day--today .cal-dn{color:#185FA5;font-weight:700}
+.cal-day--weekend{background:var(--bg-secondary)}
+.cal-dn{font-size:10px;font-weight:500;color:var(--text-tertiary);margin-bottom:2px;line-height:1}
+.cal-pill{font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;cursor:default;font-weight:500}
+.cal-more{font-size:9px;color:var(--text-tertiary);padding:0 2px;line-height:1.4}
+
 /* Grace-period badge on completed tasks */
 .task-grace{font-size:9px;color:#4d6f24;background:#EAF3DE;border-radius:5px;padding:1px 6px;white-space:nowrap;flex-shrink:0}
 .task-grace--expiring{color:#a46500;background:#FAEEDA}
@@ -878,6 +901,9 @@ async function loadClient(key){
   currentTab='overview';
   currentCycles={};
   chatHistory=[];
+  calEvents=[];
+  calYear=new Date().getFullYear();
+  calMonth=new Date().getMonth();
   // Reset chat panel but keep it open if it was open
   document.getElementById('chat-messages').innerHTML='<div class="chat-empty" id="chat-empty"><i class="ti ti-message-chatbot"></i>Ask anything about this client — delivery status, strategy, upcoming meetings, contract, performance data and more.</div>';
   document.getElementById('chat-hdr-sub').textContent='Client data loaded · ask anything';
@@ -885,9 +911,10 @@ async function loadClient(key){
   const fab=document.getElementById('chat-fab');
   if(fab) fab.style.display='flex';
   await loadTab('overview');
-  // Load delivery scores and document cycles in background
+  // Load delivery scores, document cycles, and calendar events in background
   refreshDeliveryScores();
   refreshDocumentCycles();
+  fetchDeliveryCalEvents();
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────────────
@@ -913,6 +940,8 @@ async function loadTab(tab){
       }
       updateDeliveryScoreBadges(data);
       pushCascade(data);
+      // Fetch calendar events in background — will update cal-wrap once loaded
+      fetchDeliveryCalEvents();
     }
     currentTabData=data;
     page.innerHTML=renderTab(tab,data);
@@ -1162,7 +1191,9 @@ function renderDelivery(d){
   }
 
   const calCycle=renderDocumentCycleStatus(currentCycles.content_calendar,'Content calendar');
-  return `<div class="${bannerClass}">
+  const calendarHTML=buildCalendarHTML(calYear,calMonth);
+  return `${calendarHTML}
+  <div class="${bannerClass}">
     <i class="ti ${bannerIcon} ob-icon"></i>
     <span class="ob-text">${bannerText}</span>
   </div>
@@ -2049,6 +2080,127 @@ async function submitUpload(){
     showUpStatus('error','Error: '+e.message);
     btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';
   }
+}
+
+// ── Delivery calendar ──────────────────────────────────────────────────────────────────
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth(); // 0-indexed
+let calEvents = []; // [{date:'YYYY-MM-DD', type, label, status}]
+
+const CAL_MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const CAL_DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+// type → {done bg, done col, pending border, pending col}
+const CAL_COLORS = {
+  post:     {db:'#185FA5',dc:'#fff',pb:'#185FA5',pc:'#185FA5'},
+  website:  {db:'#27500A',dc:'#fff',pb:'#27500A',pc:'#27500A'},
+  brand:    {db:'#6B248A',dc:'#fff',pb:'#6B248A',pc:'#6B248A'},
+  meeting:  {db:'#C07A00',dc:'#fff',pb:'#C07A00',pc:'#C07A00'},
+  scorecard:{db:'#6B4FBB',dc:'#fff',pb:'#6B4FBB',pc:'#6B4FBB'},
+  strategy: {db:'#085041',dc:'#fff',pb:'#085041',pc:'#085041'},
+  report:   {db:'#5F5E5A',dc:'#fff',pb:'#5F5E5A',pc:'#5F5E5A'},
+};
+
+function calPill(ev){
+  const c=CAL_COLORS[ev.type]||CAL_COLORS.report;
+  const isDone=ev.status==='done';
+  const isDue=ev.status==='due';
+  const isOver=ev.status==='overdue';
+  let bg,col,border;
+  if(isDone){bg=c.db;col=c.dc;border='none';}
+  else if(isOver){bg='#E24B4A';col='#fff';border='none';}
+  else if(isDue){bg='transparent';col=c.pc;border=`1.5px dashed ${c.pb}`;}
+  else{bg='transparent';col=c.pc;border=`1.5px solid ${c.pb}`;}
+  const short=ev.label.length>18?ev.label.substring(0,16)+'…':ev.label;
+  return `<div class="cal-pill" style="background:${bg};color:${col};border:${border}" title="${esc(ev.label)}">${esc(short)}</div>`;
+}
+
+function buildCalendarHTML(year, month){
+  const firstDay=new Date(year,month,1);
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const startDow=(firstDay.getDay()+6)%7; // Mon=0
+  const todayStr=new Date().toISOString().substring(0,10);
+  const monthStr=`${year}-${String(month+1).padStart(2,'0')}`;
+
+  // Group events by date
+  const byDate={};
+  for(const ev of calEvents){
+    if(!ev.date||!ev.date.startsWith(monthStr)) continue;
+    if(!byDate[ev.date]) byDate[ev.date]=[];
+    byDate[ev.date].push(ev);
+  }
+
+  // Prev month filler days (show dimmed)
+  const prevDays=new Date(year,month,0).getDate();
+  let cells='';
+  for(let i=0;i<startDow;i++){
+    const d=prevDays-startDow+1+i;
+    cells+=`<div class="cal-day cal-day--dim"><div class="cal-dn">${d}</div></div>`;
+  }
+
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${monthStr}-${String(d).padStart(2,'0')}`;
+    const isToday=dateStr===todayStr;
+    const isPast=dateStr<todayStr;
+    const dow=(firstDay.getDay()+d-1)%7; // 0=Sun,6=Sat
+    const isWeekend=dow===0||dow===6;
+    const evs=byDate[dateStr]||[];
+    const noPast=isPast&&!evs.length&&!isToday;
+    const pills=evs.slice(0,3).map(calPill).join('');
+    const more=evs.length>3?`<div class="cal-more">+${evs.length-3}</div>`:'';
+    cells+=`<div class="cal-day${isToday?' cal-day--today':''}${isWeekend?' cal-day--weekend':''}${noPast?' cal-day--dim':''}">
+      <div class="cal-dn">${d}</div>${pills}${more}
+    </div>`;
+  }
+
+  // Fill remaining cells to complete last row
+  const totalCells=startDow+daysInMonth;
+  const rem=(7-totalCells%7)%7;
+  for(let i=1;i<=rem;i++) cells+=`<div class="cal-day cal-day--dim"><div class="cal-dn">${i}</div></div>`;
+
+  const legend=`<div class="cal-legend">
+    <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#185FA5"></span>Post done</span>
+    <span class="cal-leg-item"><span class="cal-leg-dot cal-leg-dot--outline" style="border-color:#185FA5"></span>Post scheduled</span>
+    <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#27500A"></span>Website</span>
+    <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#6B248A"></span>Brand</span>
+    <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#C07A00"></span>Meeting</span>
+    <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#6B4FBB"></span>Scorecard</span>
+    <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#085041"></span>Strategy</span>
+  </div>`;
+
+  return `<div class="cal-wrap" id="cal-wrap">
+    <div class="cal-nav">
+      <button class="cal-nav-btn" onclick="shiftCalMonth(-1)"><i class="ti ti-chevron-left"></i></button>
+      <div class="cal-nav-title">${CAL_MONTH_NAMES[month]} ${year}</div>
+      <button class="cal-nav-btn" onclick="shiftCalMonth(1)"><i class="ti ti-chevron-right"></i></button>
+    </div>
+    ${legend}
+    <div class="cal-grid">
+      ${CAL_DOW.map(d=>`<div class="cal-dow">${d}</div>`).join('')}
+      ${cells}
+    </div>
+  </div>`;
+}
+
+function updateCalendar(){
+  const el=document.getElementById('cal-wrap');
+  if(el) el.outerHTML=buildCalendarHTML(calYear,calMonth);
+}
+
+function shiftCalMonth(delta){
+  calMonth+=delta;
+  if(calMonth>11){calMonth=0;calYear++;}
+  if(calMonth<0){calMonth=11;calYear--;}
+  updateCalendar();
+}
+
+async function fetchDeliveryCalEvents(){
+  if(!currentClient) return;
+  try{
+    const {events}=await api(`/api/clients/${currentClient}/history-events`);
+    calEvents=events||[];
+    updateCalendar();
+  }catch(e){}
 }
 
 // ── Archive browser ────────────────────────────────────────────────────────────────────

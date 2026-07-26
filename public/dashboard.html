@@ -362,12 +362,38 @@ function fmtDate(isoStr){
   return d.getUTCDate()+' '+months[d.getUTCMonth()]+' '+d.getUTCFullYear();
 }
 
+// Calculate the next 1st-of-month due date from today for not_started monthly docs
+function nextMonthlyDue(){
+  const now=new Date();
+  const y=now.getMonth()===11?now.getFullYear()+1:now.getFullYear();
+  const m=now.getMonth()===11?0:now.getMonth()+1;
+  return new Date(y,m,1);
+}
+
 function renderDocumentCycleStatus(cycle, label){
   if(!cycle) return '';
-  const {status, lastUploadedAt, nextDueAt, daysUntilDue, daysOverdue} = cycle;
+  const {status, lastUploadedAt, nextDueAt, daysUntilDue, daysOverdue, frequencyMonths} = cycle;
+
   if(status==='not_started'){
-    return `<div class="doc-cycle doc-cycle--neutral"><i class="ti ti-calendar"></i>No ${label.toLowerCase()} uploaded yet</div>`;
+    // For monthly docs (content calendar, planable) show the upcoming due date contextually
+    if(frequencyMonths===1){
+      const due=nextMonthlyDue();
+      const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const dueStr='1 '+months[due.getMonth()]+' '+due.getFullYear();
+      const today=new Date(); today.setHours(0,0,0,0);
+      const diffDays=Math.round((due-today)/(1000*60*60*24));
+      if(diffDays<=0){
+        return `<div class="doc-cycle doc-cycle--overdue doc-cycle--panel"><i class="ti ti-alert-circle"></i>${label} due · <span style="font-weight:500">${dueStr}</span></div>`;
+      }
+      if(diffDays<=7){
+        return `<div class="doc-cycle doc-cycle--due-soon"><i class="ti ti-alert-triangle"></i>${label} due · <span style="font-weight:500">${dueStr}</span></div>`;
+      }
+      return `<div class="doc-cycle doc-cycle--neutral"><i class="ti ti-calendar"></i>${label} due · <span style="font-weight:500">${dueStr}</span></div>`;
+    }
+    // Quarterly / 6-monthly docs with no upload yet — keep neutral
+    return `<div class="doc-cycle doc-cycle--neutral"><i class="ti ti-calendar"></i>${label} — not yet uploaded</div>`;
   }
+
   const lastDate = fmtDate(lastUploadedAt);
   const nextDate = fmtDate(nextDueAt);
   if(status==='current'){
@@ -381,8 +407,11 @@ function renderDocumentCycleStatus(cycle, label){
     return `<div class="doc-cycle doc-cycle--due-today"><i class="ti ti-alert-triangle"></i>${label} due today</div>`;
   }
   if(status==='overdue'){
-    const dayWord=daysOverdue===1?'day':'days';
-    return `<div class="doc-cycle doc-cycle--overdue doc-cycle--panel"><i class="ti ti-alert-circle"></i>${label} overdue by ${daysOverdue} ${dayWord} <span style="opacity:.75">· Last updated ${lastDate}</span></div>`;
+    // Calculate how many full months missed (for "2 content calendars due" wording)
+    const monthsMissed = frequencyMonths===1 ? Math.max(1,Math.ceil(daysOverdue/28)) : 1;
+    const countWord = monthsMissed>1 ? monthsMissed+' ' : '';
+    const labelPlural = monthsMissed>1 ? label.toLowerCase()+'s' : label.toLowerCase();
+    return `<div class="doc-cycle doc-cycle--overdue doc-cycle--panel"><i class="ti ti-alert-circle"></i>${countWord}${labelPlural} due · <span style="font-weight:500">${nextDate}</span> <span style="opacity:.75">· Last uploaded ${lastDate}</span></div>`;
   }
   return '';
 }

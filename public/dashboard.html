@@ -245,6 +245,35 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .cc-input-row button{font-size:11px;padding:4px 10px;border-radius:6px;border:none;background:#1a1a18;color:#fff;cursor:pointer}
 .cc-input-row .cc-cancel{background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:11px}
 
+/* Grace-period badge on completed tasks */
+.task-grace{font-size:9px;color:#4d6f24;background:#EAF3DE;border-radius:5px;padding:1px 6px;white-space:nowrap;flex-shrink:0}
+.task-grace--expiring{color:#a46500;background:#FAEEDA}
+
+/* Archive panel */
+.arch-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:1100;display:flex;align-items:flex-start;justify-content:flex-end}
+.arch-panel{width:640px;max-width:100vw;height:100vh;background:#fff;display:flex;flex-direction:column;box-shadow:-4px 0 24px rgba(0,0,0,0.12)}
+.arch-hdr{padding:14px 20px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.arch-title{font-size:13px;font-weight:600}
+.arch-close{background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-tertiary);line-height:1;padding:2px}
+.arch-close:hover{color:var(--text-primary)}
+.arch-body{display:flex;flex:1;min-height:0}
+.arch-sidebar{width:140px;flex-shrink:0;border-right:0.5px solid var(--border);overflow-y:auto;padding:10px 0}
+.arch-month-btn{display:block;width:100%;text-align:left;padding:7px 14px;font-size:12px;border:none;background:none;cursor:pointer;color:var(--text-secondary);font-family:inherit}
+.arch-month-btn:hover{background:var(--bg-secondary);color:var(--text-primary)}
+.arch-month-btn.on{background:var(--bg-secondary);color:var(--text-primary);font-weight:600}
+.arch-content{flex:1;overflow-y:auto;padding:16px 20px}
+.arch-section{margin-bottom:20px}
+.arch-section-hdr{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:8px;padding-bottom:6px;border-bottom:0.5px solid var(--border)}
+.arch-task{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:11px}
+.arch-task:last-child{border-bottom:none}
+.arch-task-done{width:14px;height:14px;border-radius:4px;background:#639922;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.arch-task-done::after{content:'';display:block;width:7px;height:4px;border-left:1.5px solid #fff;border-bottom:1.5px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+.arch-task-text{flex:1;color:var(--text-secondary)}
+.arch-task-date{font-size:10px;color:var(--text-tertiary);flex-shrink:0}
+.arch-week-hdr{font-size:11px;font-weight:600;margin:10px 0 6px;color:var(--text-secondary)}
+.arch-empty{font-size:11px;color:var(--text-tertiary);font-style:italic;padding:4px 0}
+.arch-no-months{padding:30px 20px;text-align:center;color:var(--text-tertiary);font-size:12px}
+
 /* Chat floating button */
 .chat-fab{position:fixed;bottom:22px;right:22px;width:46px;height:46px;border-radius:50%;background:#1a1a18;color:#fff;border:none;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.22);z-index:900;transition:background .15s,transform .12s}
 .chat-fab:hover{background:#333330;transform:scale(1.06)}
@@ -335,6 +364,24 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
   <div class="loading">Select a client to get started</div>
 </div>
 </div>
+</div>
+
+<!-- Archive history panel -->
+<div id="arch-overlay" class="arch-overlay" style="display:none" onclick="if(event.target===this)closeArchive()">
+  <div class="arch-panel">
+    <div class="arch-hdr">
+      <div class="arch-title">History — <span id="arch-client-name"></span></div>
+      <button class="arch-close" onclick="closeArchive()">×</button>
+    </div>
+    <div class="arch-body">
+      <div class="arch-sidebar" id="arch-sidebar">
+        <div class="arch-no-months">No archive yet</div>
+      </div>
+      <div class="arch-content" id="arch-content">
+        <div class="arch-no-months">Select a month to view archived work</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Floating chat button -->
@@ -439,12 +486,22 @@ function ptsBadge(pts){
   const col=pts>=5?'#27500A':pts>=4?'#085041':pts>=3?'#633806':pts>=2?'#185FA5':'#5F5E5A';
   return `<span class="tbadge" style="background:${bg};color:${col}">${pts}pt</span>`;
 }
+function graceBadge(t){
+  if(!(t.done||t.status==='done')||!t.completed_at) return '';
+  const days=Math.floor((Date.now()-new Date(t.completed_at))/(1000*60*60*24));
+  if(days>=7) return '';
+  const left=7-days;
+  const expiring=left<=2;
+  return `<span class="task-grace${expiring?' task-grace--expiring':''}" title="Archived in ${left} day${left===1?'':'s'}">${days===0?'Done today':`Done ${days}d ago`}</span>`;
+}
+
 function taskRow(t,showPts=false,tid=''){
   const isDone=t.done||t.status==='done';
   const cls=isDone?'done':(t.status==='over'?'over':'');
   const badge=t.badge?`<span class="tbadge" style="background:${t.badge_bg};color:${t.badge_col}">${esc(t.badge)}</span>`:'';
   const pts=showPts&&t.points?ptsBadge(t.points):'';
   const date=t.date?`<span class="tdate">${esc(t.date)}</span>`:'';
+  const grace=tid?graceBadge(t):'';
   const ckAttr=tid?`onclick="toggleDeliveryTask('${tid}')" title="Mark ${isDone?'incomplete':'complete'}"`:'';
   const descId=tid?`tdesc-${tid}`:'';
   const descBtn=t.desc&&tid?`<span class="tdesc-btn" onclick="toggleDesc('${descId}')">Details</span>`:'';
@@ -455,7 +512,7 @@ function taskRow(t,showPts=false,tid=''){
       <div class="trow">
         <div class="${ckClass(isDone?'done':t.status)}" ${ckAttr}></div>
         <span class="tn ${cls}" onclick="toggleDeliveryTask('${tid}')">${esc(t.text)}</span>
-        ${badge}${pts}${date}${descBtn}${delBtn}
+        ${badge}${pts}${date}${grace}${descBtn}${delBtn}
       </div>${descPanel}
     </div>`;
   }
@@ -639,13 +696,13 @@ async function toggleDeliveryTask(tid){
     if(!m)return;
     const wi=parseInt(m[1]),ti=parseInt(m[2]);
     const t=d.weeks?.[wi]?.tasks?.[ti];
-    if(t){const done=!isDone(t);t.status=done?'done':'';t.done=done;found=true;}
+    if(t){const done=!isDone(t);t.status=done?'done':'';t.done=done;if(done)t.completed_at=new Date().toISOString();else delete t.completed_at;found=true;}
   } else if(tid.startsWith('web')){
     const t=d.website?.[parseInt(tid.slice(3))];
-    if(t){const done=!isDone(t);t.status=done?'done':'';t.done=done;found=true;}
+    if(t){const done=!isDone(t);t.status=done?'done':'';t.done=done;if(done)t.completed_at=new Date().toISOString();else delete t.completed_at;found=true;}
   } else if(tid.startsWith('brd')){
     const t=d.brand?.[parseInt(tid.slice(3))];
-    if(t){const done=!isDone(t);t.status=done?'done':'';t.done=done;found=true;}
+    if(t){const done=!isDone(t);t.status=done?'done':'';t.done=done;if(done)t.completed_at=new Date().toISOString();else delete t.completed_at;found=true;}
   }
   if(!found)return;
   currentTabData=d;
@@ -1057,12 +1114,13 @@ function pipRow(t, tid) {
     return `<span class="${on?'on':''}" style="${on?`background:${col};border-color:${col}`:''}" onclick="setTaskPts('${tid}',${i+1})" title="${i+1}pt importance"></span>`;
   }).join('');
   const delBtn=`<span class="del-task-btn" onclick="deleteDeliveryTask('${tid}')" title="Remove task">×</span>`;
+  const grace=graceBadge(t);
   return `<div class="trow-wrap">
     <div class="trow">
       <div class="${ckClass(isDone?'done':t.status)}" onclick="toggleDeliveryTask('${tid}')" title="Mark ${isDone?'incomplete':'complete'}"></div>
       <span class="tn ${cls}" onclick="toggleDeliveryTask('${tid}')">${esc(t.text)}</span>
       <div class="pts-pip">${pips}</div>
-      ${date}${descBtn}${delBtn}
+      ${date}${grace}${descBtn}${delBtn}
     </div>${descPanel}
   </div>`;
 }
@@ -1108,7 +1166,10 @@ function renderDelivery(d){
     <i class="ti ${bannerIcon} ob-icon"></i>
     <span class="ob-text">${bannerText}</span>
   </div>
-  <div class="sec-hdr">Content calendar <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Posts · 1pt each</span></div>
+  <div class="sec-hdr" style="display:flex;align-items:center;justify-content:space-between">
+    <span>Content calendar <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Posts · 1pt each</span></span>
+    <button onclick="openArchive()" style="font-size:10px;font-weight:600;padding:3px 9px;border-radius:6px;border:0.5px solid var(--border-md);background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;font-family:inherit"><i class="ti ti-history" style="font-size:11px;margin-right:3px"></i>History</button>
+  </div>
   ${calCycle?calCycle:''}
   <div class="card" style="margin-bottom:12px">
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${weeks}</div>
@@ -1988,6 +2049,138 @@ async function submitUpload(){
     showUpStatus('error','Error: '+e.message);
     btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';
   }
+}
+
+// ── Archive browser ────────────────────────────────────────────────────────────────────
+let archiveMonths = [];
+let archiveSelectedMonth = null;
+
+async function openArchive(){
+  if(!currentClient) return;
+  document.getElementById('arch-client-name').textContent = document.getElementById('ch-name').textContent;
+  document.getElementById('arch-overlay').style.display = 'flex';
+  const {months} = await api(`/api/clients/${currentClient}/archive`);
+  archiveMonths = months || [];
+  renderArchiveSidebar();
+  if(archiveMonths.length > 0) loadArchiveMonth(archiveMonths[0]);
+}
+
+function closeArchive(){
+  document.getElementById('arch-overlay').style.display = 'none';
+}
+
+function renderArchiveSidebar(){
+  const sb = document.getElementById('arch-sidebar');
+  if(!archiveMonths.length){
+    sb.innerHTML = '<div class="arch-no-months" style="padding:20px 14px">No history yet.<br><span style="font-size:10px;margin-top:4px;display:block">Completed tasks archive here after 7 days.</span></div>';
+    return;
+  }
+  sb.innerHTML = archiveMonths.map(m => {
+    const [year, mon] = m.split('-');
+    const label = new Date(parseInt(year), parseInt(mon)-1, 1).toLocaleDateString('en-GB', {month:'long', year:'numeric'});
+    return `<button class="arch-month-btn${m===archiveSelectedMonth?' on':''}" onclick="loadArchiveMonth('${m}')">${label}</button>`;
+  }).join('');
+}
+
+async function loadArchiveMonth(month){
+  archiveSelectedMonth = month;
+  renderArchiveSidebar();
+  const content = document.getElementById('arch-content');
+  content.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const data = await api(`/api/clients/${currentClient}/archive/${month}`);
+    content.innerHTML = renderArchiveMonth(data);
+  } catch(e) {
+    content.innerHTML = `<div class="arch-empty">Failed to load archive: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderArchiveMonth(data){
+  const [year, mon] = data.month.split('-');
+  const monthLabel = new Date(parseInt(year), parseInt(mon)-1, 1).toLocaleDateString('en-GB', {month:'long', year:'numeric'});
+  const cats = data.categories || {};
+  let html = `<h2 style="font-size:13px;font-weight:600;margin-bottom:16px">${monthLabel}</h2>`;
+
+  // Content calendar
+  if(cats.content_calendar){
+    const calendars = cats.content_calendar.data || [];
+    html += `<div class="arch-section"><div class="arch-section-hdr">Content calendar${calendars.length>1?' ('+calendars.length+' batches)':''}</div>`;
+    for(const cal of calendars){
+      const weeks = cal.weeks || [];
+      for(const week of weeks){
+        const tasks = (week.tasks||[]).filter(t=>t.text);
+        if(!tasks.length) continue;
+        html += `<div class="arch-week-hdr">${esc(week.label||'')}</div>`;
+        html += tasks.map(t=>`<div class="arch-task">
+          <div class="arch-task-done"></div>
+          <span class="arch-task-text">${esc(t.text)}</span>
+          <span class="arch-task-date">${esc(t.date||'')}</span>
+        </div>`).join('');
+      }
+    }
+    html += `</div>`;
+  }
+
+  // Website tasks
+  if(cats.website_tasks){
+    const tasks = cats.website_tasks.data || [];
+    if(tasks.length){
+      html += `<div class="arch-section"><div class="arch-section-hdr">Website tasks</div>`;
+      html += tasks.map(t=>`<div class="arch-task">
+        <div class="arch-task-done"></div>
+        <span class="arch-task-text">${esc(t.text)}</span>
+        <span class="arch-task-date">${esc(t.date||'')}</span>
+      </div>`).join('');
+      html += `</div>`;
+    }
+  }
+
+  // Brand tasks
+  if(cats.brand_tasks){
+    const tasks = cats.brand_tasks.data || [];
+    if(tasks.length){
+      html += `<div class="arch-section"><div class="arch-section-hdr">Brand tasks</div>`;
+      html += tasks.map(t=>`<div class="arch-task">
+        <div class="arch-task-done"></div>
+        <span class="arch-task-text">${esc(t.text)}</span>
+        <span class="arch-task-date">${esc(t.date||'')}</span>
+      </div>`).join('');
+      html += `</div>`;
+    }
+  }
+
+  // Strategy snapshot
+  if(cats.strategy_snapshot){
+    const snaps = cats.strategy_snapshot.data || [];
+    if(snaps.length){
+      const snap = snaps[snaps.length-1]; // latest snapshot
+      html += `<div class="arch-section"><div class="arch-section-hdr">Strategy snapshot</div>`;
+      const obj = snap.hierarchy?.[0]?.desc || snap.hierarchy?.[2]?.desc || '—';
+      html += `<div style="font-size:11px;color:var(--text-secondary);line-height:1.5;padding:6px 0">`;
+      if(snap.hierarchy) snap.hierarchy.forEach(h=>{
+        html += `<div style="margin-bottom:4px"><strong style="font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.04em">${esc(h.name)}</strong><br>${esc(h.desc)}</div>`;
+      });
+      html += `</div></div>`;
+    }
+  }
+
+  // Scorecard snapshot
+  if(cats.scorecard_snapshot){
+    const snaps = cats.scorecard_snapshot.data || [];
+    if(snaps.length){
+      const snap = snaps[snaps.length-1];
+      html += `<div class="arch-section"><div class="arch-section-hdr">Scorecard snapshot</div>`;
+      html += `<div style="font-size:11px;color:var(--text-secondary);padding:6px 0">Overall score: <strong>${snap.overall||'—'}/${snap.overall_max||75}</strong> — ${esc(snap.overall_label||'')}<br>`;
+      if(snap.scorecard_date) html += `Completed: ${esc(snap.scorecard_date)}`;
+      html += `</div></div>`;
+    }
+  }
+
+  if(!cats.content_calendar && !cats.website_tasks && !cats.brand_tasks && !cats.strategy_snapshot && !cats.scorecard_snapshot){
+    html += `<div class="arch-empty">No archived items for this month.</div>`;
+  }
+
+  return html;
 }
 
 // Spinning loader animation

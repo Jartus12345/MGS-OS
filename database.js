@@ -69,6 +69,17 @@ async function init() {
       uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       processing_status VARCHAR(30) NOT NULL DEFAULT 'saved'
     );
+
+    CREATE TABLE IF NOT EXISTS client_archive (
+      id SERIAL PRIMARY KEY,
+      client_key TEXT NOT NULL,
+      archive_month TEXT NOT NULL,
+      category TEXT NOT NULL,
+      data JSONB NOT NULL DEFAULT '[]',
+      archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_client_archive UNIQUE (client_key, archive_month, category)
+    );
+    CREATE INDEX IF NOT EXISTS idx_client_archive_key ON client_archive(client_key, archive_month);
   `);
 
   await seedAdmin();
@@ -316,7 +327,33 @@ const q = {
   logUpload: (key, docType, filename, classification) => pool.query(`
     INSERT INTO client_document_upload_history (client_key, document_type, source_filename, detected_classification, processing_status)
     VALUES ($1, $2, $3, $4, 'saved')
-  `, [key, docType, filename, classification])
+  `, [key, docType, filename, classification]),
+
+  // Archive helpers
+  appendArchive: async (key, month, category, items) => {
+    const existing = await pool.query(
+      'SELECT data FROM client_archive WHERE client_key=$1 AND archive_month=$2 AND category=$3',
+      [key, month, category]
+    );
+    const prev = existing.rows[0] ? existing.rows[0].data : [];
+    const merged = Array.isArray(prev) ? [...prev, ...items] : items;
+    await pool.query(`
+      INSERT INTO client_archive (client_key, archive_month, category, data)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (client_key, archive_month, category)
+      DO UPDATE SET data = $4::jsonb, archived_at = NOW()
+    `, [key, month, category, JSON.stringify(merged)]);
+  },
+
+  getArchive: (key, month) => pool.query(
+    'SELECT category, data, archived_at FROM client_archive WHERE client_key=$1 AND archive_month=$2',
+    [key, month]
+  ).then(r => r.rows),
+
+  listArchiveMonths: (key) => pool.query(
+    `SELECT DISTINCT archive_month FROM client_archive WHERE client_key=$1 ORDER BY archive_month DESC`,
+    [key]
+  ).then(r => r.rows.map(r => r.archive_month))
 };
 
 module.exports = { pool, q, init };

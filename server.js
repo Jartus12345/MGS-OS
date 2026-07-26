@@ -101,6 +101,11 @@ app.put('/api/clients/:key/tabs/:tab', requireAuth, async (req, res) => {
   try {
     await q.upsertTab(req.params.key, req.params.tab, JSON.stringify(req.body));
     res.json({ ok: true });
+    // Run archive sweep in background after delivery tab changes
+    if (req.params.tab === 'delivery') {
+      archiveOldTasks(req.params.key).catch(() => {});
+      archiveCompletedCalendar(req.params.key).catch(() => {});
+    }
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -401,6 +406,7 @@ async function applyExtraction(clientKey, extracted) {
   }
 
   if (extracted.type === 'scorecard' && extracted.brand) {
+    await snapshotTabToArchive(clientKey, 'brand', 'scorecard_snapshot').catch(() => {});
     await q.upsertTab(clientKey, 'brand', JSON.stringify(extracted.brand));
     updated.push('brand');
   }
@@ -428,6 +434,7 @@ async function applyExtraction(clientKey, extracted) {
 
   if (extracted.type === 'strategy') {
     if (extracted.strategy) {
+      await snapshotTabToArchive(clientKey, 'strategy', 'strategy_snapshot').catch(() => {});
       await q.upsertTab(clientKey, 'strategy', JSON.stringify(extracted.strategy));
       updated.push('strategy');
     }
@@ -660,6 +667,137 @@ ${cyclesText}`;
     console.error('Chat error:', e.message);
     try { res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`); res.end(); } catch(_) {}
   }
+});
+
+// ── Archive ─────────────────────────────────────────────────────────────────────
+const ARCHIVE_GRACE_DAYS = 7;
+
+function completionMonth(task) {
+  // Use completed_at if set, otherwise fall back to current month
+  if (task.completed_at) return task.completed_at.substring(0, 7);
+  return new Date().toISOString().substring(0, 7);
+}
+
+async function archiveOldTasks(clientKey) {
+  try {
+    const row = await q.tabData(clientKey, 'delivery');
+    if (!row) return;
+    const d = JSON.parse(row.data);
+    const cutoff = new Date(Date.now() - ARCHIVE_GRACE_DAYS * 24 * 60 * 60 * 1000);
+    let changed = false;
+
+    const buckets = {}; // { 'YYYY-MM': { website: [], brand: [] } }
+    function bucket(month, type) {
+      if (!buckets[month]) buckets[month] = { website: [], brand: [] };
+      return buckets[month][type];
+    }
+
+    const newWebsite = (d.website || []).filter(t => {
+      if (!t.text || !(t.done || t.status === 'done')) return true;
+      const completedAt = t.completed_at ? new Date(t.completed_at) : null;
+      if (completedAt && completedAt < cutoff) {
+        bucket(completionMonth(t), 'website').push({ ...t, _archived_from: 'delivery' });
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    const newBrand = (d.brand || []).filter(t => {
+      if (!t.text || !(t.done || t.status === 'done')) return true;
+      const completedAt = t.completed_at ? new Date(t.completed_at) : null;
+      if (completedAt && completedAt < cutoff) {
+        bucket(completionMonth(t), 'brand').push({ ...t, _archived_from: 'delivery' });
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    if (!changed) return;
+
+    for (const [month, types] of Object.entries(buckets)) {
+      if (types.website.length) await q.appendArchive(clientKey, month, 'website_tasks', types.website);
+      if (types.brand.length) await q.appendArchive(clientKey, month, 'brand_tasks', types.brand);
+    }
+
+    d.website = newWebsite;
+    d.brand = newBrand;
+    await q.upsertTab(clientKey, 'delivery', JSON.stringify(d));
+    console.log(`Archived old tasks for ${clientKey}`);
+  } catch (e) {
+    console.error('archiveOldTasks error:', e.message);
+  }
+}
+
+async function archiveCompletedCalendar(clientKey) {
+  try {
+    const row = await q.tabData(clientKey, 'delivery');
+    if (!row) return;
+    const d = JSON.parse(row.data);
+    const weeks = d.weeks || [];
+    const allPosts = weeks.flatMap(w => (w.tasks || []).filter(t => t.text));
+    if (allPosts.length === 0) return;
+    if (!allPosts.every(t => t.done || t.status === 'done')) return;
+
+    // Use the latest completed_at across all posts to determine archive month
+    const completedAts = allPosts.map(t => t.completed_at).filter(Boolean).sort();
+    const latestCompleted = completedAts.length > 0 ? completedAts[completedAts.length - 1] : new Date().toISOString();
+    const month = latestCompleted.substring(0, 7);
+
+    await q.appendArchive(clientKey, month, 'content_calendar', [{
+      weeks,
+      post_count: allPosts.length,
+      archived_at: new Date().toISOString()
+    }]);
+
+    // Reset weeks to empty
+    d.weeks = [
+      { label: 'Week 1', tasks: [] },
+      { label: 'Week 2', tasks: [] },
+      { label: 'Week 3', tasks: [] },
+      { label: 'Week 4', tasks: [] }
+    ];
+    await q.upsertTab(clientKey, 'delivery', JSON.stringify(d));
+    console.log(`Archived completed content calendar for ${clientKey} → ${month}`);
+  } catch (e) {
+    console.error('archiveCompletedCalendar error:', e.message);
+  }
+}
+
+// Snapshot strategy/scorecard to archive when overwritten by a new PDF upload
+async function snapshotTabToArchive(clientKey, tabName, category) {
+  try {
+    const row = await q.tabData(clientKey, tabName);
+    if (!row) return;
+    const d = JSON.parse(row.data);
+    const month = new Date().toISOString().substring(0, 7);
+    await q.appendArchive(clientKey, month, category, [{
+      ...d,
+      _snapped_at: new Date().toISOString()
+    }]);
+  } catch (e) {
+    console.error('snapshotTabToArchive error:', e.message);
+  }
+}
+
+// ── Archive API endpoints ────────────────────────────────────────────────────────
+app.get('/api/clients/:key/archive', requireAuth, async (req, res) => {
+  try {
+    const months = await q.listArchiveMonths(req.params.key);
+    res.json({ months });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/clients/:key/archive/:month', requireAuth, async (req, res) => {
+  try {
+    const rows = await q.getArchive(req.params.key, req.params.month);
+    const result = {};
+    for (const row of rows) {
+      result[row.category] = { data: row.data, archived_at: row.archived_at };
+    }
+    res.json({ month: req.params.month, categories: result });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Google Calendar (stub — ready to activate with credentials) ─────────────────

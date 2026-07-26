@@ -226,6 +226,68 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .up-status.loading{background:#E6F1FB;color:#0C447C;display:block}
 .up-status.success{background:#EAF3DE;color:#1a4a07;display:block}
 .up-status.error{background:#FCEBEB;color:#791F1F;display:block}
+
+/* Contract card */
+.contract-card{border-radius:var(--radius-md);padding:10px 12px;border:0.5px solid var(--border-md);background:var(--bg-secondary);margin-bottom:10px}
+.contract-card--safe{background:#EAF3DE;border-color:#C0DD97}
+.contract-card--warn{background:#FAEEDA;border-color:#F5D47A}
+.contract-card--urgent{background:#fff1f0;border-color:#f2c0bc}
+.contract-card--neutral{background:var(--bg-secondary);border-color:var(--border-md)}
+.cc-label{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:3px}
+.cc-main{font-size:12px;font-weight:500;color:var(--text-primary)}
+.cc-sub{font-size:11px;color:var(--text-tertiary);margin-top:2px}
+.cc-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.cc-left{flex:1;min-width:0}
+.cc-edit-btn{font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid var(--border-md);background:var(--bg-primary);color:var(--text-secondary);cursor:pointer;white-space:nowrap;flex-shrink:0}
+.cc-edit-btn:hover{background:var(--bg-secondary);color:var(--text-primary)}
+.cc-input-row{display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
+.cc-input-row input,.cc-input-row select{font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:4px 8px;background:var(--bg-primary);color:var(--text-primary)}
+.cc-input-row button{font-size:11px;padding:4px 10px;border-radius:6px;border:none;background:#1a1a18;color:#fff;cursor:pointer}
+.cc-input-row .cc-cancel{background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:11px}
+
+/* Chat floating button */
+.chat-fab{position:fixed;bottom:22px;right:22px;width:46px;height:46px;border-radius:50%;background:#1a1a18;color:#fff;border:none;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.22);z-index:900;transition:background .15s,transform .12s}
+.chat-fab:hover{background:#333330;transform:scale(1.06)}
+.chat-fab i{font-size:20px}
+.chat-fab .chat-fab-dot{position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#E24B4A;border:2px solid #fff;display:none}
+
+/* Chat panel */
+.chat-overlay{position:fixed;inset:0;z-index:950;pointer-events:none}
+.chat-overlay.open{pointer-events:auto}
+.chat-panel{position:fixed;bottom:80px;right:22px;width:380px;max-width:calc(100vw - 32px);height:560px;max-height:calc(100vh - 110px);background:#fff;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,0.2);display:flex;flex-direction:column;z-index:960;transform:scale(.92) translateY(20px);opacity:0;pointer-events:none;transition:transform .18s ease,opacity .18s ease}
+.chat-panel.open{transform:scale(1) translateY(0);opacity:1;pointer-events:auto}
+.chat-hdr{padding:12px 14px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:9px;flex-shrink:0}
+.chat-hdr-av{width:28px;height:28px;border-radius:8px;background:#1a1a18;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.chat-hdr-av i{color:#fff;font-size:14px}
+.chat-hdr-info{flex:1}
+.chat-hdr-name{font-size:12px;font-weight:600}
+.chat-hdr-sub{font-size:10px;color:var(--text-tertiary)}
+.chat-close{background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-tertiary);line-height:1;padding:3px}
+.chat-close:hover{color:var(--text-primary)}
+.chat-quick{display:flex;gap:5px;padding:8px 10px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;flex-shrink:0}
+.chat-qbtn{font-size:10px;padding:4px 8px;border-radius:12px;border:0.5px solid var(--border-md);background:var(--bg-secondary);color:var(--text-secondary);cursor:pointer;white-space:nowrap;transition:background .1s,color .1s}
+.chat-qbtn:hover{background:var(--bg-tertiary);color:var(--text-primary)}
+.chat-messages{flex:1;overflow-y:auto;padding:12px 10px;display:flex;flex-direction:column;gap:8px}
+.chat-msg{max-width:88%;font-size:12px;line-height:1.55;padding:8px 10px;border-radius:10px}
+.chat-msg.user{background:#1a1a18;color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
+.chat-msg.ai{background:var(--bg-secondary);color:var(--text-primary);align-self:flex-start;border-bottom-left-radius:3px}
+.chat-msg.ai ul{padding-left:16px;margin:4px 0}
+.chat-msg.ai li{margin-bottom:2px}
+.chat-msg.ai strong{font-weight:600}
+.chat-typing{align-self:flex-start;display:flex;gap:4px;padding:10px 12px;background:var(--bg-secondary);border-radius:10px;border-bottom-left-radius:3px}
+.chat-typing span{width:6px;height:6px;border-radius:50%;background:var(--text-tertiary);animation:chatBounce .9s infinite}
+.chat-typing span:nth-child(2){animation-delay:.15s}
+.chat-typing span:nth-child(3){animation-delay:.3s}
+@keyframes chatBounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
+.chat-input-row{padding:8px 10px;border-top:0.5px solid var(--border);display:flex;gap:6px;align-items:flex-end;flex-shrink:0}
+.chat-input{flex:1;border:0.5px solid var(--border-md);border-radius:8px;padding:7px 10px;font-size:12px;font-family:inherit;resize:none;outline:none;line-height:1.4;max-height:80px;overflow-y:auto}
+.chat-input:focus{border-color:#5B9BD5}
+.chat-send{width:32px;height:32px;border-radius:8px;background:#1a1a18;border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .12s}
+.chat-send:hover{background:#333330}
+.chat-send:disabled{background:var(--bg-tertiary);cursor:not-allowed}
+.chat-send i{font-size:15px}
+.chat-empty{text-align:center;color:var(--text-tertiary);font-size:11px;margin:auto;padding:20px}
+.chat-empty i{font-size:28px;display:block;margin-bottom:8px;opacity:.5}
 </style>
 </head>
 <body>
@@ -275,6 +337,42 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 </div>
 </div>
 
+<!-- Floating chat button -->
+<button class="chat-fab" id="chat-fab" onclick="toggleChat()" title="Ask AI about this client">
+  <i class="ti ti-message-chatbot"></i>
+  <div class="chat-fab-dot" id="chat-fab-dot"></div>
+</button>
+
+<!-- Chat panel -->
+<div class="chat-overlay" id="chat-overlay" onclick="if(event.target===this)toggleChat()">
+  <div class="chat-panel" id="chat-panel">
+    <div class="chat-hdr">
+      <div class="chat-hdr-av"><i class="ti ti-sparkles"></i></div>
+      <div class="chat-hdr-info">
+        <div class="chat-hdr-name">MGS AI — Client Intelligence</div>
+        <div class="chat-hdr-sub" id="chat-hdr-sub">Ask anything about this client</div>
+      </div>
+      <button class="chat-close" onclick="toggleChat()">×</button>
+    </div>
+    <div class="chat-quick" id="chat-quick">
+      <span class="chat-qbtn" onclick="quickPrompt('Give me a pre-meeting briefing for this client. Cover their current delivery status, any overdue items, and key strategic priorities.')">Pre-meeting briefing</span>
+      <span class="chat-qbtn" onclick="quickPrompt('Give me a full delivery check. What\'s on track, what\'s overdue, and what needs urgent attention?')">Delivery check</span>
+      <span class="chat-qbtn" onclick="quickPrompt('Summarise the current strategic position. What is the client\'s commercial objective, which sprint are they in, and what are the key workstream progress levels?')">Strategy review</span>
+      <span class="chat-qbtn" onclick="quickPrompt('When is this client\'s contract up for renewal and what type are they on? Flag if action is needed soon.')">Contract status</span>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-empty" id="chat-empty">
+        <i class="ti ti-message-chatbot"></i>
+        Ask anything about this client — delivery status, strategy, upcoming meetings, contract, performance data and more.
+      </div>
+    </div>
+    <div class="chat-input-row">
+      <textarea class="chat-input" id="chat-input" placeholder="Ask about this client…" rows="1" onkeydown="chatKeydown(event)" oninput="chatAutoResize(this)"></textarea>
+      <button class="chat-send" id="chat-send" onclick="sendChatMessage()"><i class="ti ti-send"></i></button>
+    </div>
+  </div>
+</div>
+
 <!-- Upload modal -->
 <div id="upload-modal" class="up-overlay" style="display:none" onclick="if(event.target===this)closeUpload()">
   <div class="up-box">
@@ -321,6 +419,9 @@ let currentClient = null;
 let currentTab = 'overview';
 let currentTabData = {};
 let currentCycles = {}; // document-cycle data for current client
+let chatHistory = []; // [{role:'user'|'assistant', content:'...'}]
+let chatOpen = false;
+let chatStreaming = false;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────────────
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
@@ -719,6 +820,13 @@ async function loadClient(key){
   document.querySelector('[data-tab="overview"]').classList.add('on');
   currentTab='overview';
   currentCycles={};
+  chatHistory=[];
+  // Reset chat panel but keep it open if it was open
+  document.getElementById('chat-messages').innerHTML='<div class="chat-empty" id="chat-empty"><i class="ti ti-message-chatbot"></i>Ask anything about this client — delivery status, strategy, upcoming meetings, contract, performance data and more.</div>';
+  document.getElementById('chat-hdr-sub').textContent='Client data loaded · ask anything';
+  // Show chat FAB
+  const fab=document.getElementById('chat-fab');
+  if(fab) fab.style.display='flex';
   await loadTab('overview');
   // Load delivery scores and document cycles in background
   refreshDeliveryScores();
@@ -843,6 +951,7 @@ function renderOverview(d){
     </div>`).join('')||'<div class="no-data">No content added yet.</div>';
 
   const planableCycle=renderDocumentCycleStatus(currentCycles.planable_report,'Planable report');
+  const contractCard=renderContractCard(d);
   return `<div class="g4">${stats}</div>
     <div class="g21">
       <div class="card">
@@ -854,6 +963,7 @@ function renderOverview(d){
         <div class="card" style="margin-bottom:10px">
           <div class="ct">What needs to happen next</div>${actions}
         </div>
+        ${contractCard}
         <div class="card">
           <div class="ct">Top performing content</div>${topContent}
         </div>
@@ -1884,6 +1994,234 @@ async function submitUpload(){
 const style=document.createElement('style');
 style.textContent='@keyframes spin{to{transform:rotate(360deg)}}';
 document.head.appendChild(style);
+
+// ── Contract card ──────────────────────────────────────────────────────────────────────────
+function renderContractCard(d){
+  const contract=d.contract||{};
+  const type=contract.type||''; // 'monthly','6month','12month'
+  const start=contract.start_date||''; // ISO date
+  const notes=contract.notes||'';
+
+  const typeLabels={'monthly':'Monthly rolling','6month':'6-month','12month':'12-month'};
+  const typeDurations={'monthly':1,'6month':6,'12month':12};
+  const typeLabel=typeLabels[type]||'Contract';
+  const durationMonths=typeDurations[type]||null;
+
+  let cardCls='contract-card contract-card--neutral';
+  let mainLine='Contract renewal tracking not yet set up';
+  let subLine='Add a contract start date to track renewal';
+  let editBtn=`<button class="cc-edit-btn" onclick="toggleContractInput()">Set contract</button>`;
+
+  if(start&&durationMonths){
+    const now=new Date(); now.setHours(0,0,0,0);
+    // Calculate renewal date: add duration months to start date
+    const startD=new Date(start);
+    const renewY=startD.getFullYear()+Math.floor((startD.getMonth()+durationMonths)/12);
+    const renewM=((startD.getMonth()+durationMonths)%12);
+    const renewD=new Date(renewY,renewM,startD.getDate());
+    // Roll forward for monthly contracts if already past
+    let renewalDate=renewD;
+    if(type==='monthly'){
+      while(renewalDate<now) renewalDate=new Date(renewalDate.getFullYear()+(renewalDate.getMonth()===11?1:0),(renewalDate.getMonth()+1)%12,renewalDate.getDate());
+    }
+    const daysToRenew=Math.round((renewalDate-now)/(1000*60*60*24));
+    const renewalStr=fmtDate(renewalDate.toISOString());
+
+    if(type==='monthly'){
+      if(daysToRenew<=7){
+        cardCls='contract-card contract-card--warn';
+        mainLine=`Monthly contract · renews ${renewalStr}`;
+        subLine=`${daysToRenew} day${daysToRenew===1?'':'s'} to renewal — confirm continuation`;
+      } else {
+        cardCls='contract-card contract-card--safe';
+        mainLine=`Monthly rolling contract`;
+        subLine=`Next renewal ${renewalStr} · ${daysToRenew} days`;
+      }
+    } else {
+      if(daysToRenew<0){
+        cardCls='contract-card contract-card--urgent';
+        mainLine=`${typeLabel} contract — renewal overdue`;
+        subLine=`Was due ${renewalStr} · Review required immediately`;
+      } else if(daysToRenew<=30){
+        cardCls='contract-card contract-card--urgent';
+        mainLine=`${typeLabel} contract · renews ${renewalStr}`;
+        subLine=`${daysToRenew} day${daysToRenew===1?'':'s'} to renewal — action required`;
+      } else if(daysToRenew<=60){
+        cardCls='contract-card contract-card--warn';
+        mainLine=`${typeLabel} contract · renews ${renewalStr}`;
+        subLine=`${daysToRenew} days to renewal — begin renewal conversation`;
+      } else {
+        cardCls='contract-card contract-card--safe';
+        mainLine=`${typeLabel} contract · renews ${renewalStr}`;
+        subLine=`${daysToRenew} days until renewal · Started ${fmtDate(start)}`;
+      }
+    }
+    editBtn=`<button class="cc-edit-btn" onclick="toggleContractInput()">Edit</button>`;
+  } else if(start&&!durationMonths){
+    mainLine=`Contract start: ${fmtDate(start)}`;
+    subLine='Set contract type to track renewal';
+  }
+
+  return `<div class="${cardCls}" id="contract-card">
+    <div class="cc-row">
+      <div class="cc-left">
+        <div class="cc-label"><i class="ti ti-file-text" style="margin-right:3px"></i>Contract renewal</div>
+        <div class="cc-main">${mainLine}</div>
+        <div class="cc-sub">${subLine}${notes?` · ${esc(notes)}`:''}</div>
+        <div class="cc-input-row" id="cc-input-row" style="display:none">
+          <select id="cc-type" style="min-width:130px">
+            <option value="monthly" ${type==='monthly'?'selected':''}>Monthly rolling</option>
+            <option value="6month" ${type==='6month'?'selected':''}>6-month</option>
+            <option value="12month" ${type==='12month'?'selected':''}>12-month</option>
+          </select>
+          <input type="date" id="cc-start" value="${start}" title="Contract start date">
+          <button onclick="saveContractData()">Save</button>
+          <button class="cc-cancel" onclick="toggleContractInput()">Cancel</button>
+        </div>
+      </div>
+      ${editBtn}
+    </div>
+  </div>`;
+}
+
+function toggleContractInput(){
+  const row=document.getElementById('cc-input-row');
+  if(row) row.style.display=row.style.display==='none'?'flex':'none';
+}
+
+async function saveContractData(){
+  if(!currentClient)return;
+  const type=document.getElementById('cc-type')?.value||'monthly';
+  const start=document.getElementById('cc-start')?.value||'';
+  const d=await api(`/api/clients/${currentClient}/tabs/overview`);
+  d.contract={...(d.contract||{}),type,start_date:start};
+  currentTabData=d;
+  await api(`/api/clients/${currentClient}/tabs/overview`,'PUT',d);
+  document.getElementById('page-content').innerHTML=renderTab('overview',d);
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────────────────────
+function toggleChat(){
+  chatOpen=!chatOpen;
+  const panel=document.getElementById('chat-panel');
+  const overlay=document.getElementById('chat-overlay');
+  panel.classList.toggle('open',chatOpen);
+  overlay.classList.toggle('open',chatOpen);
+  if(chatOpen){
+    document.getElementById('chat-input')?.focus();
+    document.getElementById('chat-hdr-sub').textContent=currentClient?`Client data loaded · ask anything`:'Select a client first';
+  }
+}
+
+function chatKeydown(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChatMessage();}
+}
+
+function chatAutoResize(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,80)+'px';
+}
+
+function quickPrompt(text){
+  document.getElementById('chat-input').value=text;
+  chatAutoResize(document.getElementById('chat-input'));
+  sendChatMessage();
+}
+
+function mdLite(text){
+  // Minimal markdown: bold, bullet lists
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/^[\*\-]\s+(.+)$/gm,'<li>$1</li>')
+    .replace(/(<li>.*<\/li>)/gs,(match)=>'<ul>'+match+'</ul>')
+    .replace(/\n{2,}/g,'</p><p>')
+    .replace(/\n/g,'<br>');
+}
+
+function appendChatMsg(role, html, id=''){
+  const empty=document.getElementById('chat-empty');
+  if(empty) empty.remove();
+  const msgs=document.getElementById('chat-messages');
+  const div=document.createElement('div');
+  div.className='chat-msg '+role;
+  if(id) div.id=id;
+  div.innerHTML=html;
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+  return div;
+}
+
+function showChatTyping(){
+  const msgs=document.getElementById('chat-messages');
+  const el=document.createElement('div');
+  el.className='chat-typing';el.id='chat-typing';
+  el.innerHTML='<span></span><span></span><span></span>';
+  msgs.appendChild(el);
+  msgs.scrollTop=msgs.scrollHeight;
+}
+function removeChatTyping(){
+  document.getElementById('chat-typing')?.remove();
+}
+
+async function sendChatMessage(){
+  if(!currentClient||chatStreaming)return;
+  const input=document.getElementById('chat-input');
+  const text=(input?.value||'').trim();
+  if(!text)return;
+  input.value='';
+  chatAutoResize(input);
+  document.getElementById('chat-send').disabled=true;
+
+  appendChatMsg('user',esc(text));
+  chatHistory.push({role:'user',content:text});
+  chatStreaming=true;
+  showChatTyping();
+
+  try{
+    const resp=await fetch(`/api/clients/${currentClient}/chat`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:text, history:chatHistory.slice(0,-1)})
+    });
+    if(!resp.ok) throw new Error(await resp.text());
+
+    removeChatTyping();
+    const aiDiv=appendChatMsg('ai','',`chat-ai-${Date.now()}`);
+    const reader=resp.body.getReader();
+    const dec=new TextDecoder();
+    let buf='',fullText='';
+
+    while(true){
+      const {done,value}=await reader.read();
+      if(done) break;
+      buf+=dec.decode(value,{stream:true});
+      const lines=buf.split('\n');
+      buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: ')) continue;
+        const raw=line.slice(6).trim();
+        if(raw==='[DONE]') break;
+        try{
+          const j=JSON.parse(raw);
+          if(j.text){
+            fullText+=j.text;
+            aiDiv.innerHTML=mdLite(fullText);
+            document.getElementById('chat-messages').scrollTop=document.getElementById('chat-messages').scrollHeight;
+          }
+        }catch{}
+      }
+    }
+    if(fullText) chatHistory.push({role:'assistant',content:fullText});
+  }catch(e){
+    removeChatTyping();
+    appendChatMsg('ai',`<span style="color:#a32a23">Error: ${esc(e.message)}</span>`);
+  } finally {
+    chatStreaming=false;
+    document.getElementById('chat-send').disabled=false;
+    document.getElementById('chat-input')?.focus();
+  }
+}
 
 boot();
 </script>

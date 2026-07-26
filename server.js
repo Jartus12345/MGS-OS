@@ -481,6 +481,162 @@ app.post('/api/clients/:key/upload', requireAuth, upload.single('pdf'), async (r
   }
 });
 
+// ── Chat context builders ──────────────────────────────────────────────────────
+function buildDeliveryCtx(d) {
+  if (!d || !Object.keys(d).length) return 'No delivery data.';
+  const lines = [`Overdue tasks: ${d.overdue_count || 0}`];
+  (d.weeks || []).forEach(w => {
+    if (w.tasks?.length) {
+      lines.push(`${w.label}:`);
+      w.tasks.forEach(t => lines.push(`  [${t.status || 'pending'}] ${t.text}${t.date ? ' · ' + t.date : ''}`));
+    }
+  });
+  if (d.website?.length) {
+    lines.push('Website tasks:');
+    d.website.forEach(t => lines.push(`  [${t.status || 'pending'}] ${t.text}${t.points ? ' · ' + t.points + 'pt' : ''}${t.date ? ' · ' + t.date : ''}`));
+  }
+  if (d.brand?.length) {
+    lines.push('Brand tasks:');
+    d.brand.forEach(t => lines.push(`  [${t.status || 'pending'}] ${t.text}${t.points ? ' · ' + t.points + 'pt' : ''}${t.date ? ' · ' + t.date : ''}`));
+  }
+  return lines.join('\n');
+}
+function buildStrategyCtx(d) {
+  if (!d || !Object.keys(d).length) return 'No strategy data.';
+  const lines = [];
+  (d.hierarchy || []).forEach(h => lines.push(`${h.name}: ${h.desc}`));
+  if (d.workstreams?.length) { lines.push('Workstreams:'); d.workstreams.forEach(w => lines.push(`  ${w.label}: ${w.val || w.pct + '%'}`)); }
+  if (d.perceptions?.length) { lines.push('Perception targets:'); d.perceptions.forEach(p => lines.push(`  ${p.label}: ${p.val || p.pct + '%'}`)); }
+  return lines.join('\n');
+}
+function buildSprintsCtx(d) {
+  if (!d?.sprints?.length) return 'No sprint data.';
+  return d.sprints.map(s => {
+    const tasks = (s.tasks || []).map(t => `    [${t.done ? 'done' : 'pending'}] ${t.text}`).join('\n');
+    return `${s.title} (${s.status}) — ${s.period}\n${s.body || ''}${tasks ? '\n' + tasks : ''}`;
+  }).join('\n\n');
+}
+function buildProgressCtx(d) {
+  if (!d?.metrics?.length) return 'No Planable metrics.';
+  return d.metrics.map(m => `${m.label}: ${m.value}${m.tag ? ' ' + m.tag : ''}`).join('\n');
+}
+function buildBrandCtx(d) {
+  if (!d || !Object.keys(d).length) return 'No scorecard data.';
+  const lines = [`Overall: ${d.overall || 0}/${d.overall_max || 75} — ${d.overall_label || ''}`];
+  (d.sections || []).forEach(s => lines.push(`  ${s.label}: ${s.score}/${s.max}`));
+  (d.recommendations || []).forEach((r, i) => lines.push(`Recommendation ${i + 1}: ${r.title} — ${r.body}`));
+  return lines.join('\n');
+}
+function buildContractCtx(d) {
+  const c = d?.contract;
+  if (!c) return 'No contract data set.';
+  if (c.type === 'monthly') return 'Rolling monthly contract.';
+  const typeLabel = c.type === '6mo' ? '6-month' : '12-month';
+  if (!c.start_date) return `${typeLabel} contract — start date not set.`;
+  const start = new Date(c.start_date);
+  const months = c.type === '6mo' ? 6 : 12;
+  const renewal = new Date(start); renewal.setMonth(renewal.getMonth() + months);
+  const days = Math.round((renewal - new Date()) / (1000 * 60 * 60 * 24));
+  return `${typeLabel} contract · Started ${start.toLocaleDateString('en-GB')} · Renews ${renewal.toLocaleDateString('en-GB')} (${days > 0 ? 'in ' + days + ' days' : Math.abs(days) + ' days overdue'})`;
+}
+
+// ── API: Chat (streaming SSE) ───────────────────────────────────────────────────
+app.post('/api/clients/:key/chat', requireAuth, async (req, res) => {
+  const { message, history } = req.body;
+  if (!message?.trim()) return res.status(400).json({ error: 'No message' });
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+  try {
+    const client = await q.clientByKey(req.params.key);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+
+    const tabNames = ['overview', 'strategy', 'sprints', 'delivery', 'progress', 'brand'];
+    const tabs = {};
+    for (const tab of tabNames) {
+      try { const row = await q.tabData(req.params.key, tab); tabs[tab] = row ? JSON.parse(row.data) : {}; }
+      catch(e) { tabs[tab] = {}; }
+    }
+
+    let cyclesText = 'No cycle data.';
+    try {
+      const cycles = await q.docCycles(req.params.key);
+      cyclesText = cycles.map(c => {
+        const s = calcCycleStatus(c);
+        return `${c.document_type}: ${s.status}${s.daysOverdue > 0 ? ' (' + s.daysOverdue + 'd overdue)' : ''}${s.daysUntilDue > 0 ? ' (due in ' + s.daysUntilDue + 'd)' : ''}`;
+      }).join('\n');
+    } catch(e) {}
+
+    const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+    const systemPrompt = `You are MGS AI — the intelligent assistant built into MGS OS, the client delivery operating system for Manx Growth Solutions, a marketing agency based on the Isle of Man.
+
+Today is ${today}.
+
+You have live access to all data for client: ${client.name} (${client.sub || ''}).
+Current phase: ${client.phase || '—'} · Delivery score: ${client.score || '—'}
+
+Answer questions precisely using the data below. Be direct and specific — reference actual task names, scores, dates, and numbers. When producing briefings, use clear sections and bullet points. If something is not in the data, say so rather than guessing.
+
+═══ QUARTERLY STRATEGY ═══
+${buildStrategyCtx(tabs.strategy)}
+
+═══ SPRINTS ═══
+${buildSprintsCtx(tabs.sprints)}
+
+═══ DELIVERY ═══
+${buildDeliveryCtx(tabs.delivery)}
+
+═══ PLANABLE METRICS (last report) ═══
+${buildProgressCtx(tabs.progress)}
+
+═══ DIGITAL CREDIBILITY SCORECARD ═══
+${buildBrandCtx(tabs.brand)}
+
+═══ CONTRACT ═══
+${buildContractCtx(tabs.overview)}
+
+═══ DOCUMENT FRESHNESS ═══
+${cyclesText}`;
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const msgHistory = [
+      ...((history || []).slice(-12).map(m => ({ role: m.role, content: m.content }))),
+      { role: 'user', content: message.trim() }
+    ];
+
+    const stream = await getAnthropic().messages.create({
+      model: 'claude-sonnet-5',
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: msgHistory,
+      stream: true
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
+        res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`);
+      }
+    }
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch(e) {
+    console.error('Chat error:', e.message);
+    try { res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`); res.end(); } catch(_) {}
+  }
+});
+
+// ── Google Calendar (stub — ready to activate with credentials) ─────────────────
+// To activate: set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars,
+// install googleapis: npm install googleapis
+// Then implement OAuth2 flow using google.auth.OAuth2 and calendar.events.insert
+app.get('/api/google/status', requireAuth, (req, res) => {
+  res.json({ connected: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET), configured: false });
+});
+
 // ── API: Session info ───────────────────────────────────────────────────
 app.get('/api/me', requireAuth, (req, res) => {
   res.json({ email: req.session.userEmail });

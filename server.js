@@ -809,7 +809,7 @@ app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
         for (const t of (week.tasks || [])) {
           if (!t.text) continue;
           const plannedDate = parseEventDate(t.date);
-          const date = t.completed_at ? t.completed_at.substring(0,10) : (plannedDate||null);
+          const date = plannedDate || (t.completed_at ? t.completed_at.substring(0,10) : null);
           if (!date) continue;
           const status = (t.done||t.status==='done') ? 'done' : (t.status==='over' ? 'overdue' : 'pending');
           events.push({ date, type: 'post', label: t.text, status, planned_date: plannedDate||date,
@@ -862,9 +862,10 @@ app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
             for (const week of (cal.weeks || [])) {
               for (const t of (week.tasks || [])) {
                 if (!t.text) continue;
-                const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
+                const plannedDate2 = parseEventDate(t.date);
+                const date = plannedDate2 || (t.completed_at ? t.completed_at.substring(0,10) : null);
                 if (!date) continue;
-                events.push({ date, type: 'post', label: t.text, status: 'done',
+                events.push({ date, type: 'post', label: t.text, status: 'done', planned_date: date,
                   detail: { text: t.text, desc: t.desc||'', date: t.date||date, week_label: week.label||'', points: t.points||0, status: 'done', completed_at: t.completed_at||null } });
               }
             }

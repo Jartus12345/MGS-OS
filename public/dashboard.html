@@ -207,6 +207,8 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .save-msg{font-size:11px;color:#27500A;background:#EAF3DE;padding:6px 12px;border-radius:6px;display:none}
 .upload-btn{margin-right:6px;font-size:10px;font-weight:600;padding:5px 11px;border-radius:6px;border:0.5px solid #B5D4F4;background:#E6F1FB;cursor:pointer;font-family:inherit;color:#185FA5;display:flex;align-items:center;gap:5px;white-space:nowrap}
 .upload-btn:hover{background:#d0e6f8}
+.upload-btn:disabled{opacity:.6;cursor:not-allowed}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* Upload modal */
 .up-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:2000;display:flex;align-items:center;justify-content:center}
@@ -424,6 +426,7 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
     <div class="tab" data-tab="progress"><i class="ti ti-chart-bar"></i>Progress</div>
     <div class="tab" data-tab="brand"><i class="ti ti-shield-check"></i>Brand</div>
     <div class="tab-spacer"></div>
+    <button class="upload-btn" id="report-btn" onclick="generateReport()" style="border-color:#B5D4C4;background:#E6F3EC;color:#27500A"><i class="ti ti-file-analytics"></i>Create Report</button>
     <button class="upload-btn" id="upload-btn" onclick="openUpload()"><i class="ti ti-upload"></i>Upload PDF</button>
     <button class="edit-btn" id="edit-btn" onclick="openEdit()"><i class="ti ti-edit"></i>Edit data</button>
   </div>
@@ -2091,8 +2094,34 @@ function autoMarkOverdue(d) {
 // ── PDF Upload ────────────────────────────────────────────────────────────────────────────
 let selectedFile = null;
 
+async function generateReport(){
+  if(!currentClient) return;
+  const btn = document.getElementById('report-btn');
+  const origHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader-2" style="animation:spin 1s linear infinite"></i>Generating…';
+  try {
+    const resp = await fetch(`/api/clients/${currentClient}/generate-report`, { method:'POST', headers:{'Content-Type':'application/json'} });
+    if (!resp.ok) { const e = await resp.json().catch(()=>({error:'Unknown error'})); throw new Error(e.error||'Failed'); }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const disp = resp.headers.get('Content-Disposition')||'';
+    const match = disp.match(/filename="([^"]+)"/);
+    a.download = match ? match[1] : `${currentClient}_report.pdf`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Report generation failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHTML;
+  }
+}
+
 function openUpload(){
-  if(!currentClient)return;
+  if(!currentClient) return;
   selectedFile=null;
   document.getElementById('up-file-name').style.display='none';
   document.getElementById('up-status').className='up-status';

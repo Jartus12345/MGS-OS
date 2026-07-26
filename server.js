@@ -669,6 +669,189 @@ ${cyclesText}`;
   }
 });
 
+// ── Report generation ─────────────────────────────────────────────────────────
+app.post('/api/clients/:key/generate-report', requireAuth, async (req, res) => {
+  try {
+    const client = await q.clientByKey(req.params.key);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+
+    const tabNames = ['overview', 'strategy', 'sprints', 'delivery', 'progress', 'brand'];
+    const tabs = {};
+    for (const tab of tabNames) {
+      try { const row = await q.tabData(req.params.key, tab); tabs[tab] = row ? JSON.parse(row.data) : {}; }
+      catch(e) { tabs[tab] = {}; }
+    }
+
+    let cyclesText = '';
+    try {
+      const cycles = await q.docCycles(req.params.key);
+      cyclesText = cycles.map(c => {
+        const s = calcCycleStatus(c);
+        return `${c.document_type}: ${s.status}${s.daysOverdue > 0 ? ' (' + s.daysOverdue + 'd overdue)' : ''}${s.daysUntilDue > 0 ? ' (due in ' + s.daysUntilDue + 'd)' : ''}`;
+      }).join('\n');
+    } catch(e) {}
+
+    const today = new Date();
+    const todayLabel = today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+    // Compute delivery totals for the prompt
+    const d = tabs.delivery || {};
+    const allPosts = (d.weeks || []).flatMap(w => w.tasks || []);
+    const donePosts = allPosts.filter(t => t.done || t.status === 'done').length;
+    const overduePosts = allPosts.filter(t => !(t.done || t.status === 'done') && t.date && parseEventDate(t.date) < today.toISOString().substring(0,10)).length;
+    const websiteDone = (d.website || []).filter(t => t.done || t.status === 'done').length;
+    const brandDone = (d.brand || []).filter(t => t.done || t.status === 'done').length;
+
+    const reportPrompt = `You are writing a formal client delivery report for ${client.name} at Manx Growth Solutions. Today is ${todayLabel}.
+
+Generate a FULL WRITTEN REPORT using the data below. The report must:
+- Start with the exact date (Today: ${todayLabel})
+- Open with a clear one-paragraph executive summary — state client delivery score (${client.score || 'N/A'}%), whether they are ahead/on track/behind, and the most important thing to know right now
+- Work through sections from smallest to biggest deliverables
+- Back every statement with numbers from the data
+- Be professional, direct, and specific — no filler
+- Use markdown formatting (## for sections, **bold** for key figures, - for bullets)
+
+DATA:
+Client: ${client.name} | Score: ${client.score || 'N/A'}% | Phase: ${client.phase || 'N/A'}
+
+CONTENT CALENDAR
+${allPosts.length} posts total · ${donePosts} done · ${overduePosts} overdue
+${buildDeliveryCtx(d)}
+
+WEBSITE TASKS (${websiteDone}/${(d.website||[]).length} done)
+${(d.website||[]).map(t=>`- [${t.done||t.status==='done'?'done':'pending'}] ${t.text}${t.date?' · '+t.date:''}`).join('\n')||'None'}
+
+BRAND TASKS (${brandDone}/${(d.brand||[]).length} done)
+${(d.brand||[]).map(t=>`- [${t.done||t.status==='done'?'done':'pending'}] ${t.text}${t.date?' · '+t.date:''}`).join('\n')||'None'}
+
+DIGITAL CREDIBILITY SCORECARD
+${buildBrandCtx(tabs.brand)}
+
+QUARTERLY STRATEGY
+${buildStrategyCtx(tabs.strategy)}
+
+SPRINTS
+${buildSprintsCtx(tabs.sprints)}
+
+PLANABLE METRICS
+${buildProgressCtx(tabs.progress)}
+
+CONTRACT
+${buildContractCtx(tabs.overview)}
+
+DOCUMENT FRESHNESS
+${cyclesText||'No cycle data.'}
+
+Write the full report now. Use this structure:
+## Executive Summary
+## Client Delivery Score
+## Content Calendar
+## Website Tasks
+## Brand Tasks
+## Digital Credibility Scorecard
+## Strategy Alignment
+## What Needs to Happen Now`;
+
+    const message = await getAnthropic().messages.create({
+      model: 'claude-sonnet-5',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: reportPrompt }]
+    });
+
+    const reportMd = message.content[0]?.text || 'Report generation failed.';
+
+    // Convert markdown to HTML sections
+    function mdToHtml(md) {
+      return md
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>[\s\S]*?<\/li>)/g, (m) => `<ul>${m}</ul>`)
+        .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/^(?!<[hlu])(.+)$/gm, (m) => m.trim() ? m : '')
+        .split('\n').filter(l=>l.trim()).join('\n');
+    }
+
+    const reportHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${client.name} — MGS Client Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;font-size:13px;line-height:1.7;color:#1a1a1a;background:#fff;padding:0}
+  .page{max-width:820px;margin:0 auto;padding:48px 52px}
+  .cover{display:flex;flex-direction:column;gap:4px;padding-bottom:36px;border-bottom:2px solid #1a1a1a;margin-bottom:36px}
+  .logo{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#888;margin-bottom:12px}
+  .client-name{font-size:28px;font-weight:800;letter-spacing:-.02em;color:#1a1a1a}
+  .report-title{font-size:13px;font-weight:500;color:#555;margin-top:2px}
+  .meta{display:flex;gap:24px;margin-top:20px;flex-wrap:wrap}
+  .meta-item{display:flex;flex-direction:column;gap:2px}
+  .meta-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#999}
+  .meta-value{font-size:14px;font-weight:700;color:#1a1a1a}
+  .score-big{font-size:42px;font-weight:800;color:#185FA5;line-height:1}
+  .body-content h2{font-size:16px;font-weight:700;color:#1a1a1a;margin:32px 0 10px;padding-bottom:6px;border-bottom:0.5px solid #e0e0e0}
+  .body-content h3{font-size:13px;font-weight:700;color:#333;margin:18px 0 6px}
+  .body-content p{margin:8px 0;color:#2a2a2a}
+  .body-content ul{margin:8px 0 8px 18px}
+  .body-content li{margin:3px 0;color:#2a2a2a}
+  .body-content strong{font-weight:700;color:#1a1a1a}
+  .footer{margin-top:48px;padding-top:18px;border-top:0.5px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center}
+  .footer-left{font-size:10px;color:#999;font-weight:500}
+  .footer-right{font-size:10px;color:#ccc}
+  @media print{body{padding:0}@page{margin:1.5cm 1.8cm;size:A4}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="cover">
+    <div class="logo">Manx Growth Solutions · Client Report</div>
+    <div class="client-name">${client.name}</div>
+    <div class="report-title">Delivery & Strategy Report</div>
+    <div class="meta">
+      <div class="meta-item"><div class="meta-label">Date</div><div class="meta-value">${todayLabel}</div></div>
+      <div class="meta-item"><div class="meta-label">Delivery Score</div><div class="score-big">${client.score || '—'}%</div></div>
+      <div class="meta-item"><div class="meta-label">Phase</div><div class="meta-value">${client.phase || '—'}</div></div>
+    </div>
+  </div>
+  <div class="body-content">
+    <p>${mdToHtml(reportMd)}</p>
+  </div>
+  <div class="footer">
+    <div class="footer-left">MGS OS · Manx Growth Solutions · Generated ${todayLabel}</div>
+    <div class="footer-right">Confidential</div>
+  </div>
+</div>
+</body>
+</html>`;
+
+    // Render to PDF with Playwright / Chromium
+    const { chromium } = require('playwright');
+    const browser = await chromium.launch({
+      executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setContent(reportHtml, { waitUntil: 'networkidle' });
+    const pdf = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '0', right: '0', bottom: '0', left: '0' } });
+    await browser.close();
+
+    const filename = `${client.name.replace(/[^a-z0-9]/gi,'_')}_Report_${today.toISOString().substring(0,10)}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdf);
+
+  } catch(e) {
+    console.error('Report error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Archive ─────────────────────────────────────────────────────────────────────
 const ARCHIVE_GRACE_DAYS = 7;
 

@@ -45,10 +45,35 @@ async function init() {
       updated_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(client_key, tab)
     );
+
+    CREATE TABLE IF NOT EXISTS client_document_cycles (
+      id SERIAL PRIMARY KEY,
+      client_key TEXT NOT NULL,
+      document_type VARCHAR(50) NOT NULL,
+      last_uploaded_at TIMESTAMPTZ,
+      next_due_at DATE,
+      frequency_months INTEGER NOT NULL,
+      last_source_filename TEXT,
+      last_document_classification VARCHAR(100),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_client_document_cycle UNIQUE (client_key, document_type)
+    );
+
+    CREATE TABLE IF NOT EXISTS client_document_upload_history (
+      id SERIAL PRIMARY KEY,
+      client_key TEXT NOT NULL,
+      document_type VARCHAR(50) NOT NULL,
+      source_filename TEXT,
+      detected_classification VARCHAR(100),
+      uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      processing_status VARCHAR(30) NOT NULL DEFAULT 'saved'
+    );
   `);
 
   await seedAdmin();
   await seedClients();
+  await seedDocumentCycles();
   console.log('Database ready.');
 }
 
@@ -237,6 +262,26 @@ async function seedClients() {
   console.log('Default clients seeded.');
 }
 
+// ── Seed document cycles ──────────────────────────────────────────────────────
+async function seedDocumentCycles() {
+  const { rows: clients } = await pool.query('SELECT key FROM clients');
+  const docTypes = [
+    { type: 'strategy', months: 3 },
+    { type: 'planable_report', months: 1 },
+    { type: 'scorecard', months: 6 },
+    { type: 'content_calendar', months: 1 }
+  ];
+  for (const client of clients) {
+    for (const doc of docTypes) {
+      await pool.query(`
+        INSERT INTO client_document_cycles (client_key, document_type, frequency_months)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (client_key, document_type) DO NOTHING
+      `, [client.key, doc.type, doc.months]);
+    }
+  }
+}
+
 // ── Query helpers ─────────────────────────────────────────────────────────────
 const q = {
   allClients:   ()          => pool.query('SELECT * FROM clients ORDER BY sort_order ASC, id ASC').then(r => r.rows),
@@ -251,7 +296,27 @@ const q = {
     UPDATE clients SET name=$1,sub=$2,phase=$3,avatar=$4,avatar_bg=$5,avatar_col=$6,
     score=$7,score_bg=$8,score_col=$9,badge=$10,badge_bg=$11,badge_col=$12 WHERE key=$13
   `, [c.name,c.sub,c.phase,c.avatar,c.avatar_bg,c.avatar_col,c.score,c.score_bg,c.score_col,c.badge,c.badge_bg,c.badge_col,c.key]),
-  userByEmail:  (email)     => pool.query('SELECT * FROM users WHERE email = $1', [email]).then(r => r.rows[0])
+  userByEmail:  (email)     => pool.query('SELECT * FROM users WHERE email = $1', [email]).then(r => r.rows[0]),
+  docCycles:    (key)       => pool.query('SELECT * FROM client_document_cycles WHERE client_key = $1', [key]).then(r => r.rows),
+  upsertDocCycle: (key, docType, uploadedAt, nextDueAt, filename, classification) => pool.query(`
+    INSERT INTO client_document_cycles (client_key, document_type, frequency_months, last_uploaded_at, next_due_at, last_source_filename, last_document_classification, updated_at)
+    VALUES ($1, $2,
+      CASE $2
+        WHEN 'strategy' THEN 3
+        WHEN 'planable_report' THEN 1
+        WHEN 'scorecard' THEN 6
+        WHEN 'content_calendar' THEN 1
+        ELSE 1
+      END,
+      $3, $4, $5, $6, NOW())
+    ON CONFLICT (client_key, document_type) DO UPDATE
+      SET last_uploaded_at = $3, next_due_at = $4, last_source_filename = $5,
+          last_document_classification = $6, updated_at = NOW()
+  `, [key, docType, uploadedAt, nextDueAt, filename, classification]),
+  logUpload: (key, docType, filename, classification) => pool.query(`
+    INSERT INTO client_document_upload_history (client_key, document_type, source_filename, detected_classification, processing_status)
+    VALUES ($1, $2, $3, $4, 'saved')
+  `, [key, docType, filename, classification])
 };
 
 module.exports = { pool, q, init };

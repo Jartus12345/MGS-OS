@@ -101,6 +101,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .del-task-btn{font-size:13px;color:var(--text-tertiary);cursor:pointer;padding:0 3px;line-height:1;flex-shrink:0;opacity:0;transition:opacity .15s}
 .trow-wrap:hover .del-task-btn{opacity:1}
 .del-task-btn:hover{color:#E24B4A}
+.doc-cycle{display:flex;align-items:center;gap:5px;font-size:11px;line-height:1.4;margin:0 0 12px;flex-wrap:wrap}
+.doc-cycle--neutral{color:#7a746c}
+.doc-cycle--current{color:#4d6f24}
+.doc-cycle--due-soon,.doc-cycle--due-today{color:#a46500}
+.doc-cycle--overdue{color:#a32a23}
+.doc-cycle--overdue.doc-cycle--panel{background:#fff1f0;border:0.5px solid #f2c0bc;border-radius:var(--radius-md);padding:7px 10px}
+.doc-cycle i{font-size:12px;flex-shrink:0}
+.cr-cycle-warn{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;font-size:9px;margin-left:4px;flex-shrink:0;cursor:default}
+.cr-cycle-warn--overdue{background:#FCEBEB;color:#a32a23}
+.cr-cycle-warn--soon{background:#FEF3DC;color:#a46500}
 .add-task-trigger{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-tertiary);cursor:pointer;padding:7px 0 2px;user-select:none}
 .add-task-trigger:hover{color:var(--text-primary)}
 .add-task-trigger i{font-size:13px}
@@ -296,6 +306,7 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 let currentClient = null;
 let currentTab = 'overview';
 let currentTabData = {};
+let currentCycles = {}; // document-cycle data for current client
 
 // ── Helpers ────────────────────────────────────────────────────────────────────────────
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
@@ -342,6 +353,38 @@ function taskRow(t,showPts=false,tid=''){
 function toggleDesc(id){
   const el=document.getElementById(id);
   if(el)el.classList.toggle('open');
+}
+
+function fmtDate(isoStr){
+  if(!isoStr)return '—';
+  const d=new Date(isoStr);
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return d.getUTCDate()+' '+months[d.getUTCMonth()]+' '+d.getUTCFullYear();
+}
+
+function renderDocumentCycleStatus(cycle, label){
+  if(!cycle) return '';
+  const {status, lastUploadedAt, nextDueAt, daysUntilDue, daysOverdue} = cycle;
+  if(status==='not_started'){
+    return `<div class="doc-cycle doc-cycle--neutral"><i class="ti ti-calendar"></i>No ${label.toLowerCase()} uploaded yet</div>`;
+  }
+  const lastDate = fmtDate(lastUploadedAt);
+  const nextDate = fmtDate(nextDueAt);
+  if(status==='current'){
+    return `<div class="doc-cycle doc-cycle--current"><i class="ti ti-circle-check"></i>${label} last updated ${lastDate} <span style="color:var(--text-tertiary)">· Next due ${nextDate}</span></div>`;
+  }
+  if(status==='due_soon'){
+    const dayWord=daysUntilDue===1?'day':'days';
+    return `<div class="doc-cycle doc-cycle--due-soon"><i class="ti ti-alert-triangle"></i>Next ${label.toLowerCase()} due in ${daysUntilDue} ${dayWord} <span style="opacity:.75">· ${nextDate}</span></div>`;
+  }
+  if(status==='due_today'){
+    return `<div class="doc-cycle doc-cycle--due-today"><i class="ti ti-alert-triangle"></i>${label} due today</div>`;
+  }
+  if(status==='overdue'){
+    const dayWord=daysOverdue===1?'day':'days';
+    return `<div class="doc-cycle doc-cycle--overdue doc-cycle--panel"><i class="ti ti-alert-circle"></i>${label} overdue by ${daysOverdue} ${dayWord} <span style="opacity:.75">· Last updated ${lastDate}</span></div>`;
+  }
+  return '';
 }
 async function toggleDeliveryTask(tid){
   if(!currentClient)return;
@@ -533,9 +576,11 @@ async function loadClient(key){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.querySelector('[data-tab="overview"]').classList.add('on');
   currentTab='overview';
+  currentCycles={};
   await loadTab('overview');
-  // Load delivery scores in background
+  // Load delivery scores and document cycles in background
   refreshDeliveryScores();
+  refreshDocumentCycles();
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────────────
@@ -578,6 +623,37 @@ async function refreshDeliveryScores(){
     updateDeliveryScoreBadges(updated);
     pushCascade(updated);
   }catch(e){}
+}
+
+async function refreshDocumentCycles(){
+  if(!currentClient)return;
+  try{
+    const resp=await api(`/api/clients/${currentClient}/document-cycles`);
+    currentCycles=resp.cycles||{};
+    updateSidebarCycleWarning(resp.summary);
+    // Re-render current tab to show cycle indicators (only if tab data is already loaded)
+    if(currentTabData&&Object.keys(currentTabData).length>0){
+      document.getElementById('page-content').innerHTML=renderTab(currentTab,currentTabData);
+    }
+  }catch(e){}
+}
+
+function updateSidebarCycleWarning(summary){
+  if(!currentClient||!summary)return;
+  const cr=document.getElementById('cr-'+currentClient);
+  if(!cr)return;
+  // Remove existing warning if present
+  cr.querySelectorAll('.cr-cycle-warn').forEach(el=>el.remove());
+  if(!summary.hasWarning)return;
+  const isOverdue=summary.overdueCount>0;
+  const cls=isOverdue?'cr-cycle-warn--overdue':'cr-cycle-warn--soon';
+  const tip=isOverdue?`${summary.overdueCount} recurring document${summary.overdueCount>1?'s':''} overdue`:`${summary.dueSoonCount} recurring document${summary.dueSoonCount>1?'s':''} due soon`;
+  const dot=document.createElement('span');
+  dot.className=`cr-cycle-warn ${cls}`;
+  dot.title=tip;
+  dot.textContent='!';
+  const top=cr.querySelector('.cr-top');
+  if(top)top.appendChild(dot);
 }
 
 // ── Renderers ───────────────────────────────────────────────────────────────────────────
@@ -624,6 +700,7 @@ function renderOverview(d){
       <span class="mv">${esc(r.value)}<span class="mtag" style="background:${r.tag_bg||'#EAF3DE'};color:${r.tag_col||'#27500A'}">${esc(r.tag)}</span></span>
     </div>`).join('')||'<div class="no-data">No content added yet.</div>';
 
+  const planableCycle=renderDocumentCycleStatus(currentCycles.planable_report,'Planable report');
   return `<div class="g4">${stats}</div>
     <div class="g21">
       <div class="card">
@@ -638,6 +715,7 @@ function renderOverview(d){
         <div class="card">
           <div class="ct">Top performing content</div>${topContent}
         </div>
+        <div class="card" style="margin-top:10px">${planableCycle||'<div class="doc-cycle doc-cycle--neutral"><i class="ti ti-calendar"></i>No Planable report uploaded yet</div>'}</div>
       </div>
     </div>`;
 }
@@ -671,7 +749,9 @@ function renderStrategy(d){
     {label:'Audience growth',pct:0,color:'#EF9F27',val:'0%',val_col:'#EF9F27'}
   ]).map(p=>progressBar(p.label,p.pct,p.color,`<span style="font-weight:500;color:${p.val_col}">${esc(p.val)}</span>`)).join('');
 
-  return `<div class="g12">
+  const strategyCycle=renderDocumentCycleStatus(currentCycles.strategy,'Quarterly strategy');
+  return `${strategyCycle?`<div style="padding:0 0 2px">${strategyCycle}</div>`:''}
+  <div class="g12">
     <div class="card"><div class="ct">Strategic hierarchy</div>${hier}</div>
     <div>
       <div class="card" style="margin-bottom:10px"><div class="ct">Five strategic workstreams</div>${ws}</div>
@@ -686,7 +766,9 @@ function renderSprints(d){
     {title:'Sprint 2',period:'Month 4–6',status:'Planned',status_bg:'#F1EFE8',status_col:'#5F5E5A',border_col:'rgba(0,0,0,0.1)',bar_pct:0,bar_col:'',body:'',tasks:[],faded:true},
     {title:'Sprint 3',period:'Month 7–9',status:'Planned',status_bg:'#F1EFE8',status_col:'#5F5E5A',border_col:'rgba(0,0,0,0.1)',bar_pct:0,bar_col:'',body:'',tasks:[],faded:true}
   ];
-  return sprints.map(s=>{
+  const sc=currentCycles.strategy;
+  const sprintCycleLine=sc&&sc.status!=='not_started'?`<div style="font-size:11px;color:${sc.status==='overdue'?'#a32a23':sc.status==='current'?'#4d6f24':'#a46500'};margin-bottom:10px">Quarterly plan updated ${fmtDate(sc.lastUploadedAt)} · Next due ${fmtDate(sc.nextDueAt)}</div>`:'';
+  return sprintCycleLine+sprints.map(s=>{
     const tasks=s.tasks.map(t=>taskRow(t)).join('');
     return `<div style="border:0.5px solid ${s.border_col};border-radius:var(--radius-md);padding:13px;margin-bottom:10px${s.faded?';opacity:.6':''}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
@@ -767,11 +849,13 @@ function renderDelivery(d){
     return Array.from({length:5},(_,i)=>`<span class="add-pip" data-id="${id}" data-v="${i+1}" onclick="setAddPip('${id}',${i+1})" title="${i+1}pt" style="display:inline-block;width:10px;height:10px;border-radius:2px;border:1.5px solid var(--border-md);cursor:pointer;margin-right:2px;vertical-align:middle"></span>`).join('');
   }
 
+  const calCycle=renderDocumentCycleStatus(currentCycles.content_calendar,'Content calendar');
   return `<div class="${bannerClass}">
     <i class="ti ${bannerIcon} ob-icon"></i>
     <span class="ob-text">${bannerText}</span>
   </div>
   <div class="sec-hdr">Content calendar <span style="font-weight:400;font-size:10px;color:var(--text-tertiary);margin-left:6px">Posts · 1pt each</span></div>
+  ${calCycle?calCycle:''}
   <div class="card" style="margin-bottom:12px">
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${weeks}</div>
     <div style="border-top:0.5px solid var(--border);margin-top:10px;padding-top:6px">
@@ -867,7 +951,9 @@ function renderProgress(d){
     </div>
     <div>
       <div class="card" style="margin-bottom:10px">
-        <div class="ct">Planable metrics — 90 days</div>${metrics}
+        <div class="ct">Planable metrics — 90 days</div>
+        ${renderDocumentCycleStatus(currentCycles.planable_report,'Planable report')}
+        ${metrics}
       </div>
       <div class="card">
         <div class="ct">Audience — geography</div>${geo}
@@ -956,10 +1042,7 @@ function renderBrand(d){
       <div class="card" style="margin-bottom:10px">
         <div class="ct">Top 3 MGS recommendations</div>${recs}
       </div>
-      ${d.rescore_reminder?`<div class="reminder-box">
-        <i class="ti ti-calendar rb-icon"></i>
-        <div class="rb-text"><span style="font-weight:600">Rescore reminder</span><br>${d.rescore_reminder}</div>
-      </div>`:''}
+      <div class="card">${renderDocumentCycleStatus(currentCycles.scorecard,'Digital Credibility Scorecard')||'<div class="doc-cycle doc-cycle--neutral"><i class="ti ti-calendar"></i>No scorecard uploaded yet</div>'}</div>
     </div>
   </div>`;
 }
@@ -1477,7 +1560,9 @@ function updateDeliveryScoreBadges(d) {
   const qEl = document.getElementById('ch-quarterly');
 
   // Check if any website/brand tasks are still at default 1pt (unrated)
-  const unratedCount = [...(d.website||[]),...(d.brand||[])].filter(t=>t.text&&!(t.points>1)).length;
+  const unratedWeb = (d.website||[]).filter(t=>t.text&&!(t.points>1)).length;
+  const unratedBrd = (d.brand||[]).filter(t=>t.text&&!(t.points>1)).length;
+  const unratedCount = unratedWeb + unratedBrd;
   const totalWb = [...(d.website||[]),...(d.brand||[])].filter(t=>t.text).length;
   const allRated = totalWb===0 || unratedCount===0;
 
@@ -1486,7 +1571,12 @@ function updateDeliveryScoreBadges(d) {
     const [bg, col] = scoreColor(monthOverdue > 0 ? Math.min(monthPct, 49) : monthPct);
     let label = 'Delivery: ' + monthPct + '% · ' + monthDone + '/' + monthTotal + ' pts';
     if (monthOverdue > 0) label += ' · ⚠ ' + monthOverdue + ' pts overdue';
-    if (!allRated) label += ' · ' + unratedCount + ' task' + (unratedCount>1?'s':'')+' unrated';
+    if (!allRated) {
+      const parts=[];
+      if(unratedWeb>0) parts.push(unratedWeb+' website');
+      if(unratedBrd>0) parts.push(unratedBrd+' brand');
+      label += ' · ' + unratedCount + ' unrated' + (parts.length?' ('+parts.join(' · ')+')':'');
+    }
     dsEl.textContent = label;
     dsEl.style.background = bg; dsEl.style.color = col; dsEl.style.display = '';
     // Also update sidebar score for this client
@@ -1630,9 +1720,15 @@ async function submitUpload(){
     const data=await r.json();
     if(!r.ok)throw new Error(data.error||'Upload failed');
     const tabList=data.tabs_updated.map(t=>t.charAt(0).toUpperCase()+t.slice(1)).join(', ');
-    showUpStatus('success',`<strong>Done!</strong> Detected: ${data.type_label||data.type}${data.period?' ('+data.period+')':''}.<br>Updated tabs: <strong>${tabList}</strong>`);
-    // Reload current tab if it was updated
+    let cycleMsg='';
+    if(data.cycle_update){
+      const cu=data.cycle_update;
+      cycleMsg=`<br><span style="font-size:11px;color:#4d6f24">${cu.label} updated · Next due ${fmtDate(cu.nextDueAt)}</span>`;
+    }
+    showUpStatus('success',`<strong>Done!</strong> Detected: ${data.type_label||data.type}${data.period?' ('+data.period+')':''}.<br>Updated tabs: <strong>${tabList}</strong>${cycleMsg}`);
+    // Reload current tab if it was updated; always refresh cycles
     if(data.tabs_updated.includes(currentTab))await loadTab(currentTab);
+    if(data.cycle_update)await refreshDocumentCycles();
     btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';
   }catch(e){
     showUpStatus('error','Error: '+e.message);

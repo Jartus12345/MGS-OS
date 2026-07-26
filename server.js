@@ -104,6 +104,81 @@ app.put('/api/clients/:key/tabs/:tab', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Document cycle helpers ──────────────────────────────────────────────────────
+const CYCLE_DOC_TYPES = ['strategy', 'planable_report', 'scorecard', 'content_calendar'];
+
+// Map AI classification types to cycle document types
+const CLASSIFICATION_TO_CYCLE = {
+  strategy: 'strategy',
+  planable: 'planable_report',
+  scorecard: 'scorecard',
+  content_calendar: 'content_calendar'
+};
+
+const CYCLE_LABELS = {
+  strategy: 'Quarterly strategy',
+  planable_report: 'Planable report',
+  scorecard: 'Digital Credibility Scorecard',
+  content_calendar: 'Content calendar'
+};
+
+function addCalendarMonths(dateStr, months) {
+  const d = new Date(dateStr);
+  const targetMonth = d.getMonth() + months;
+  const year = d.getFullYear() + Math.floor(targetMonth / 12);
+  const month = ((targetMonth % 12) + 12) % 12;
+  // Clamp to last valid day of target month
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const day = Math.min(d.getDate(), lastDay);
+  return new Date(year, month, day);
+}
+
+function calcCycleStatus(cycle, nowDate) {
+  const today = nowDate || new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+
+  if (!cycle.last_uploaded_at || !cycle.next_due_at) {
+    return { status: 'not_started', lastUploadedAt: null, nextDueAt: null, daysUntilDue: null, daysOverdue: 0, frequencyMonths: cycle.frequency_months };
+  }
+
+  const nextDue = new Date(cycle.next_due_at);
+  const nextDueStr = nextDue.toISOString().slice(0, 10);
+  const diffMs = nextDue - new Date(todayStr);
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  let status;
+  if (diffDays > 7) status = 'current';
+  else if (diffDays > 0) status = 'due_soon';
+  else if (diffDays === 0) status = 'due_today';
+  else status = 'overdue';
+
+  return {
+    status,
+    lastUploadedAt: cycle.last_uploaded_at,
+    nextDueAt: nextDueStr,
+    daysUntilDue: diffDays > 0 ? diffDays : 0,
+    daysOverdue: diffDays < 0 ? Math.abs(diffDays) : 0,
+    frequencyMonths: cycle.frequency_months,
+    lastSourceFilename: cycle.last_source_filename || null
+  };
+}
+
+// ── API: Document cycles ────────────────────────────────────────────────────────
+app.get('/api/clients/:key/document-cycles', requireAuth, async (req, res) => {
+  try {
+    const rows = await q.docCycles(req.params.key);
+    const cycles = {};
+    for (const docType of CYCLE_DOC_TYPES) {
+      const row = rows.find(r => r.document_type === docType) || { document_type: docType, frequency_months: { strategy: 3, planable_report: 1, scorecard: 6, content_calendar: 1 }[docType] };
+      const statusData = calcCycleStatus(row);
+      cycles[docType] = { documentType: docType, label: CYCLE_LABELS[docType], ...statusData };
+    }
+    const overdueCount = Object.values(cycles).filter(c => c.status === 'overdue').length;
+    const dueSoonCount = Object.values(cycles).filter(c => c.status === 'due_soon' || c.status === 'due_today').length;
+    res.json({ clientKey: req.params.key, cycles, summary: { overdueCount, dueSoonCount, hasWarning: overdueCount > 0 || dueSoonCount > 0 } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── API: PDF upload & AI extraction ────────────────────────────────────────────
 const EXTRACTION_PROMPT = `You are a data extraction assistant for MGS OS, a marketing agency client dashboard.
 
@@ -373,13 +448,32 @@ app.post('/api/clients/:key/upload', requireAuth, upload.single('pdf'), async (r
     const extracted = await extractPDF(req.file.buffer);
     const updated = await applyExtraction(req.params.key, extracted);
 
+    // Update document cycle if this is a tracked recurring document type
+    let cycleUpdate = null;
+    const cycleDocType = CLASSIFICATION_TO_CYCLE[extracted.type];
+    if (cycleDocType) {
+      try {
+        const now = new Date();
+        const nextDue = addCalendarMonths(now.toISOString().slice(0, 10), { strategy: 3, planable_report: 1, scorecard: 6, content_calendar: 1 }[cycleDocType]);
+        const nextDueStr = nextDue.toISOString().slice(0, 10);
+        const filename = req.file.originalname || null;
+        await q.upsertDocCycle(req.params.key, cycleDocType, now.toISOString(), nextDueStr, filename, extracted.type);
+        await q.logUpload(req.params.key, cycleDocType, filename, extracted.type).catch(() => {});
+        const row = { last_uploaded_at: now.toISOString(), next_due_at: nextDueStr, frequency_months: { strategy: 3, planable_report: 1, scorecard: 6, content_calendar: 1 }[cycleDocType], last_source_filename: filename };
+        cycleUpdate = { documentType: cycleDocType, label: CYCLE_LABELS[cycleDocType], ...calcCycleStatus(row) };
+      } catch (cycleErr) {
+        console.error('Cycle update failed (non-fatal):', cycleErr.message);
+      }
+    }
+
     const typeLabels = { planable: 'Planable report', scorecard: 'Digital Credibility Scorecard', strategy: 'Strategy document', content_calendar: 'Content calendar', task_list: `Task list (${extracted.section||'delivery'})` };
     res.json({
       ok: true,
       type: extracted.type,
       type_label: typeLabels[extracted.type] || 'Document',
       period: extracted.period || null,
-      tabs_updated: updated
+      tabs_updated: updated,
+      cycle_update: cycleUpdate
     });
   } catch (e) {
     console.error('PDF extraction error:', e.message);

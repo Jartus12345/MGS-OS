@@ -98,6 +98,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .add-task-row .at-btn:hover{background:#0C447C}
 .add-task-row .at-cancel{font-size:11px;color:var(--text-tertiary);cursor:pointer;padding:4px 6px}
 .add-task-row .at-cancel:hover{color:var(--text-primary)}
+.del-task-btn{font-size:13px;color:var(--text-tertiary);cursor:pointer;padding:0 3px;line-height:1;flex-shrink:0;opacity:0;transition:opacity .15s}
+.trow-wrap:hover .del-task-btn{opacity:1}
+.del-task-btn:hover{color:#E24B4A}
 .add-task-trigger{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-tertiary);cursor:pointer;padding:7px 0 2px;user-select:none}
 .add-task-trigger:hover{color:var(--text-primary)}
 .add-task-trigger i{font-size:13px}
@@ -256,7 +259,7 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
       <button class="up-close" onclick="closeUpload()">×</button>
     </div>
     <div class="up-body">
-      <p style="font-size:11px;color:var(--text-tertiary);margin-bottom:14px;line-height:1.5">Upload a Planable report, Digital Credibility Scorecard, or Strategy document. The AI will read it and automatically fill in the relevant tabs.</p>
+      <p style="font-size:11px;color:var(--text-tertiary);margin-bottom:14px;line-height:1.5">Upload any agency PDF: <strong>Content calendar</strong> → Delivery posts · <strong>Website or brand brief</strong> → Delivery tasks · <strong>Planable report</strong> → Progress metrics · <strong>Digital Credibility Scorecard</strong> → Brand tab · <strong>Strategy document</strong> → Strategy &amp; Sprints. The AI reads it and fills the relevant tabs automatically.</p>
       <div class="drop-zone" id="drop-zone" onclick="document.getElementById('pdf-input').click()" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
         <i class="ti ti-file-type-pdf"></i>
         <p>Click to choose a PDF, or drag and drop here</p>
@@ -321,11 +324,12 @@ function taskRow(t,showPts=false,tid=''){
   const descBtn=t.desc&&tid?`<span class="tdesc-btn" onclick="toggleDesc('${descId}')">Details</span>`:'';
   const descPanel=t.desc&&tid?`<div class="tdesc-panel" id="${descId}">${esc(t.desc)}</div>`:'';
   if(tid){
+    const delBtn=`<span class="del-task-btn" onclick="deleteDeliveryTask('${tid}')" title="Remove task">×</span>`;
     return `<div class="trow-wrap">
       <div class="trow">
         <div class="${ckClass(isDone?'done':t.status)}" ${ckAttr}></div>
         <span class="tn ${cls}" onclick="toggleDeliveryTask('${tid}')">${esc(t.text)}</span>
-        ${badge}${pts}${date}${descBtn}
+        ${badge}${pts}${date}${descBtn}${delBtn}
       </div>${descPanel}
     </div>`;
   }
@@ -358,6 +362,25 @@ async function toggleDeliveryTask(tid){
     if(t){const done=!isDone(t);t.status=done?'done':'';t.done=done;found=true;}
   }
   if(!found)return;
+  currentTabData=d;
+  api(`/api/clients/${currentClient}/tabs/delivery`,'PUT',d).catch(()=>{});
+  updateDeliveryScoreBadges(d);
+  pushCascade(d);
+  document.getElementById('page-content').innerHTML=renderTab('delivery',d);
+}
+async function deleteDeliveryTask(tid){
+  if(!currentClient)return;
+  const d=await api(`/api/clients/${currentClient}/tabs/delivery`);
+  if(tid.startsWith('wk')){
+    const m=tid.match(/wk(\d+)t(\d+)/);
+    if(!m)return;
+    const wi=parseInt(m[1]),ti=parseInt(m[2]);
+    if(d.weeks?.[wi]?.tasks)d.weeks[wi].tasks.splice(ti,1);
+  } else if(tid.startsWith('web')){
+    if(d.website)d.website.splice(parseInt(tid.slice(3)),1);
+  } else if(tid.startsWith('brd')){
+    if(d.brand)d.brand.splice(parseInt(tid.slice(3)),1);
+  }
   currentTabData=d;
   api(`/api/clients/${currentClient}/tabs/delivery`,'PUT',d).catch(()=>{});
   updateDeliveryScoreBadges(d);
@@ -697,12 +720,13 @@ function pipRow(t, tid) {
     const col=on?pipCols[pts-1]:'';
     return `<span class="${on?'on':''}" style="${on?`background:${col};border-color:${col}`:''}" onclick="setTaskPts('${tid}',${i+1})" title="${i+1}pt importance"></span>`;
   }).join('');
+  const delBtn=`<span class="del-task-btn" onclick="deleteDeliveryTask('${tid}')" title="Remove task">×</span>`;
   return `<div class="trow-wrap">
     <div class="trow">
       <div class="${ckClass(isDone?'done':t.status)}" onclick="toggleDeliveryTask('${tid}')" title="Mark ${isDone?'incomplete':'complete'}"></div>
       <span class="tn ${cls}" onclick="toggleDeliveryTask('${tid}')">${esc(t.text)}</span>
       <div class="pts-pip">${pips}</div>
-      ${date}${descBtn}
+      ${date}${descBtn}${delBtn}
     </div>${descPanel}
   </div>`;
 }
@@ -1104,8 +1128,10 @@ function editDelivery(d){
     </div>`;
   }).join('');
 
-  const website=Array.from({length:6},(_,i)=>d.website?.[i]||{status:'',text:'',date:'',points:1});
-  const brand=Array.from({length:6},(_,i)=>d.brand?.[i]||{status:'',text:'',date:'',points:1});
+  const webCount=Math.max(6,(d.website||[]).length+1);
+  const brdCount=Math.max(6,(d.brand||[]).length+1);
+  const website=Array.from({length:webCount},(_,i)=>d.website?.[i]||{status:'',text:'',date:'',points:1});
+  const brand=Array.from({length:brdCount},(_,i)=>d.brand?.[i]||{status:'',text:'',date:'',points:1});
 
   function ptsSelect(id,val){
     return `<select class="fi" id="${id}" style="padding:6px 8px" title="Importance (pts)">
@@ -1279,12 +1305,37 @@ function readSprints(){
 }
 
 function readDelivery(){
-  const weeks=Array.from({length:4},(_,i)=>({  
-    label:gv(`del-wk-${i}-label`)||`Week ${i+1}`,
-    tasks:Array.from({length:6},(_,j)=>({status:gv(`del-wk-${i}-task-${j}-status`),text:gv(`del-wk-${i}-task-${j}-text`),date:gv(`del-wk-${i}-task-${j}-date`),points:1})).filter(t=>t.text)
-  }));
-  const website=Array.from({length:6},(_,i)=>({status:gv(`del-web-${i}-status`),text:gv(`del-web-${i}-text`),date:gv(`del-web-${i}-date`),points:parseInt(gv(`del-web-${i}-points`))||1})).filter(t=>t.text);
-  const brand=Array.from({length:6},(_,i)=>({status:gv(`del-brd-${i}-status`),text:gv(`del-brd-${i}-text`),date:gv(`del-brd-${i}-date`),points:parseInt(gv(`del-brd-${i}-points`))||1})).filter(t=>t.text);
+  // Preserve any fields not in the form (desc, done) from the currently-loaded data
+  const prev=currentTabData||{};
+  const prevWeeks=prev.weeks||[];
+  const prevWeb=prev.website||[];
+  const prevBrd=prev.brand||[];
+  const weeks=Array.from({length:4},(_,i)=>{
+    const pw=prevWeeks[i]||{};
+    return {
+      label:gv(`del-wk-${i}-label`)||`Week ${i+1}`,
+      tasks:Array.from({length:6},(_,j)=>{
+        const pt=pw.tasks?.[j]||{};
+        const text=gv(`del-wk-${i}-task-${j}-text`);
+        if(!text) return null;
+        return {status:gv(`del-wk-${i}-task-${j}-status`),text,date:gv(`del-wk-${i}-task-${j}-date`),points:1,done:pt.done||false,desc:pt.desc||''};
+      }).filter(Boolean)
+    };
+  });
+  const webCount=Math.max(6,(prevWeb).length+1);
+  const brdCount=Math.max(6,(prevBrd).length+1);
+  const website=Array.from({length:webCount},(_,i)=>{
+    const pt=prevWeb[i]||{};
+    const text=gv(`del-web-${i}-text`);
+    if(!text) return null;
+    return {status:gv(`del-web-${i}-status`),text,date:gv(`del-web-${i}-date`),points:parseInt(gv(`del-web-${i}-points`))||1,done:pt.done||false,desc:pt.desc||''};
+  }).filter(Boolean);
+  const brand=Array.from({length:brdCount},(_,i)=>{
+    const pt=prevBrd[i]||{};
+    const text=gv(`del-brd-${i}-text`);
+    if(!text) return null;
+    return {status:gv(`del-brd-${i}-status`),text,date:gv(`del-brd-${i}-date`),points:parseInt(gv(`del-brd-${i}-points`))||1,done:pt.done||false,desc:pt.desc||''};
+  }).filter(Boolean);
   const overdueCount=[...weeks.flatMap(w=>w.tasks),...website,...brand].filter(t=>t.status==='over').length;
   return {overdue_count:overdueCount,weeks,website,brand};
 }

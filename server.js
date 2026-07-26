@@ -818,18 +818,20 @@ app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
       }
       for (const t of (d.website || [])) {
         if (!t.text) continue;
-        const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
+        const pd = parseEventDate(t.date);
+        const date = pd || (t.completed_at ? t.completed_at.substring(0,10) : null);
         if (!date) continue;
         const status = (t.done||t.status==='done') ? 'done' : (t.status==='over' ? 'overdue' : 'pending');
-        events.push({ date, type: 'website', label: t.text, status,
+        events.push({ date, type: 'website', label: t.text, status, planned_date: pd||date,
           detail: { text: t.text, desc: t.desc||'', date: t.date||date, status, completed_at: t.completed_at||null } });
       }
       for (const t of (d.brand || [])) {
         if (!t.text) continue;
-        const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
+        const pd = parseEventDate(t.date);
+        const date = pd || (t.completed_at ? t.completed_at.substring(0,10) : null);
         if (!date) continue;
         const status = (t.done||t.status==='done') ? 'done' : (t.status==='over' ? 'overdue' : 'pending');
-        events.push({ date, type: 'brand', label: t.text, status,
+        events.push({ date, type: 'brand', label: t.text, status, planned_date: pd||date,
           detail: { text: t.text, desc: t.desc||'', date: t.date||date, status, completed_at: t.completed_at||null } });
       }
     }
@@ -848,7 +850,12 @@ app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
       const b = JSON.parse(brandRow.data);
       if (b.scorecard_date) {
         const date = parseEventDate(b.scorecard_date);
-        if (date) events.push({ date, type: 'scorecard', label: 'Digital Credibility Scorecard', status: 'done' });
+        if (date) {
+          const today = new Date().toISOString().substring(0,10);
+          const status = date > today ? 'pending' : 'done';
+          events.push({ date, type: 'scorecard', label: 'Digital Credibility Scorecard', status, planned_date: date,
+            detail: { text: 'Digital Credibility Scorecard', desc: '', date: b.scorecard_date, status, completed_at: null } });
+        }
       }
     }
 
@@ -873,15 +880,17 @@ app.get('/api/clients/:key/history-events', requireAuth, async (req, res) => {
         }
         if (row.category === 'website_tasks') {
           for (const t of (row.data || [])) {
-            const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
-            if (date && t.text) events.push({ date, type: 'website', label: t.text, status: 'done',
+            const pd = parseEventDate(t.date);
+            const date = pd || (t.completed_at ? t.completed_at.substring(0,10) : null);
+            if (date && t.text) events.push({ date, type: 'website', label: t.text, status: 'done', planned_date: pd||date,
               detail: { text: t.text, desc: t.desc||'', date: t.date||date, status: 'done', completed_at: t.completed_at||null } });
           }
         }
         if (row.category === 'brand_tasks') {
           for (const t of (row.data || [])) {
-            const date = t.completed_at ? t.completed_at.substring(0,10) : parseEventDate(t.date);
-            if (date && t.text) events.push({ date, type: 'brand', label: t.text, status: 'done',
+            const pd = parseEventDate(t.date);
+            const date = pd || (t.completed_at ? t.completed_at.substring(0,10) : null);
+            if (date && t.text) events.push({ date, type: 'brand', label: t.text, status: 'done', planned_date: pd||date,
               detail: { text: t.text, desc: t.desc||'', date: t.date||date, status: 'done', completed_at: t.completed_at||null } });
           }
         }

@@ -267,7 +267,7 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .cal-dn{font-size:10px;font-weight:500;color:var(--text-tertiary);margin-bottom:2px;line-height:1}
 .cal-pill{font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;cursor:pointer;font-weight:500}
 .cal-pill:hover{filter:brightness(1.1)}
-.cal-pill--ready{background:linear-gradient(135deg,#185FA5 50%,#fff 50%)!important;color:#fff!important;border:1.5px solid #185FA5!important;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+.cal-pill--ready{text-shadow:0 1px 2px rgba(0,0,0,.28)}
 .cal-more{font-size:9px;color:var(--text-tertiary);padding:0 2px;line-height:1.4;cursor:pointer}
 .cal-day--clickable{cursor:pointer}
 .cal-day--clickable:hover{border-color:#185FA5;background:var(--bg-secondary)}
@@ -2149,9 +2149,9 @@ function calPill(ev, dateStr, idx){
   const isDue=ev.status==='due';
   const isOver=ev.status==='overdue';
   const todayStr=new Date().toISOString().substring(0,10);
-  const isReady=isDone && ev.type==='post' && ev.planned_date && ev.planned_date>todayStr;
+  const isReady=isDone && ev.planned_date && ev.planned_date>todayStr;
   let bg,col,border,extraClass='';
-  if(isReady){bg='';col='';border='';extraClass=' cal-pill--ready';}
+  if(isReady){bg=`linear-gradient(135deg,${c.db} 50%,#fff 50%)`;col='#fff';border=`1.5px solid ${c.db}`;extraClass=' cal-pill--ready';}
   else if(isDone){bg=c.db;col=c.dc;border='none';}
   else if(isOver){bg='#E24B4A';col='#fff';border='none';}
   else if(isDue){bg='transparent';col=c.pc;border=`1.5px dashed ${c.pb}`;}
@@ -2207,7 +2207,7 @@ function buildCalendarHTML(year, month){
 
   const legend=`<div class="cal-legend">
     <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#185FA5"></span>Post done</span>
-    <span class="cal-leg-item"><span class="cal-leg-dot" style="background:linear-gradient(135deg,#185FA5 50%,#fff 50%);border:1px solid #185FA5"></span>Post ready</span>
+    <span class="cal-leg-item"><span class="cal-leg-dot" style="background:linear-gradient(135deg,#185FA5 50%,#fff 50%);border:1px solid #185FA5"></span>Ready (done, not yet live)</span>
     <span class="cal-leg-item"><span class="cal-leg-dot cal-leg-dot--outline" style="border-color:#185FA5"></span>Post due</span>
     <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#27500A"></span>Website</span>
     <span class="cal-leg-item"><span class="cal-leg-dot" style="background:#6B248A"></span>Brand</span>
@@ -2275,7 +2275,7 @@ function caldayListHTML(evs, dateStr){
     const typeCol = CAL_TYPE_COLORS[ev.type]||'#5F5E5A';
     const typeLabel = CAL_TYPE_LABELS[ev.type]||ev.type;
     const td=new Date().toISOString().substring(0,10);
-    const isR=ev.status==='done'&&ev.type==='post'&&ev.planned_date&&ev.planned_date>td;
+    const isR=ev.status==='done'&&ev.planned_date&&ev.planned_date>td;
     const ds=isR?'ready':ev.status;
     const statusCol = STATUS_COLORS[ds]||'#5F5E5A';
     const statusLabel = STATUS_LABELS[ds]||ev.status;
@@ -2297,7 +2297,7 @@ function showCalEventDetail(dateStr, idx){
   const typeCol = CAL_TYPE_COLORS[ev.type]||'#5F5E5A';
   const typeLabel = CAL_TYPE_LABELS[ev.type]||ev.type;
   const todayStr2 = new Date().toISOString().substring(0,10);
-  const isReady2 = ev.status==='done' && ev.type==='post' && ev.planned_date && ev.planned_date>todayStr2;
+  const isReady2 = ev.status==='done' && ev.planned_date && ev.planned_date>todayStr2;
   const displayStatus = isReady2 ? 'ready' : ev.status;
   const statusCol = STATUS_COLORS[displayStatus]||STATUS_COLORS[ev.status]||'#5F5E5A';
   const statusLabel = STATUS_LABELS[displayStatus]||ev.status;

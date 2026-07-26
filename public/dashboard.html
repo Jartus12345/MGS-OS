@@ -272,6 +272,23 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .cal-day--clickable{cursor:pointer}
 .cal-day--clickable:hover{border-color:#185FA5;background:var(--bg-secondary)}
 
+/* Mini calendar date picker (add-task forms) */
+.mcal-wrap{margin-top:8px;border:0.5px solid var(--border-md);border-radius:8px;padding:8px;background:var(--bg-secondary)}
+.mcal-nav{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.mcal-nav-title{font-size:11px;font-weight:600;flex:1;text-align:center}
+.mcal-nav-btn{background:var(--bg-primary);border:0.5px solid var(--border-md);border-radius:5px;width:22px;height:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0;font-size:12px}
+.mcal-nav-btn:hover{background:var(--bg-tertiary,#e5e7eb)}
+.mcal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px}
+.mcal-dow{font-size:8px;font-weight:700;color:var(--text-tertiary);text-align:center;padding:2px 0 4px;letter-spacing:.04em;text-transform:uppercase}
+.mcal-day{height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:var(--text-secondary);cursor:pointer;border:0.5px solid transparent;transition:background .1s,border-color .1s;position:relative}
+.mcal-day:hover{background:var(--bg-primary);border-color:var(--border-md)}
+.mcal-day--dim{opacity:.35;cursor:default;pointer-events:none}
+.mcal-day--today{border-color:#185FA5;color:#185FA5;font-weight:700}
+.mcal-day--sel{background:#185FA5!important;color:#fff!important;border-color:#185FA5!important;font-weight:700}
+.mcal-day--has{font-weight:700;color:var(--text-primary)}
+.mcal-day--has::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:3px;height:3px;border-radius:50%;background:#185FA5}
+.mcal-selected-label{font-size:10px;color:#185FA5;font-weight:600;margin-top:6px;text-align:center;min-height:14px}
+
 /* Calendar day modal */
 .calday-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;display:flex;align-items:center;justify-content:center;padding:20px}
 .calday-modal{background:var(--bg-primary);border-radius:12px;width:100%;max-width:520px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
@@ -798,7 +815,19 @@ async function deleteDeliveryTask(tid){
 // Add-task form helpers
 function toggleAddForm(id){
   const el=document.getElementById(id);
-  if(el)el.style.display=el.style.display==='none'?'block':'none';
+  if(!el) return;
+  const opening = el.style.display==='none';
+  el.style.display=opening?'block':'none';
+  if(opening){
+    // Re-render mini cal with fresh state when form opens
+    const targetMap={'add-post-form':'post','add-web-form':'web','add-brd-form':'brand'};
+    const t=targetMap[id];
+    if(t){
+      mcalSelected=null;mcalYear=new Date().getFullYear();mcalMonth=new Date().getMonth();mcalTarget=t;
+      const mc=el.querySelector('.mcal-wrap');
+      if(mc) mc.outerHTML=buildMiniCalHTML(t);
+    }
+  }
 }
 // Pip selector state for add forms (keyed by prefix 'aw'/'ab')
 const _addPts={aw:1,ab:1};
@@ -821,29 +850,34 @@ function saveDelivery(d){
 function addPost(){
   const title=(document.getElementById('ap-title')?.value||'').trim();
   if(!title)return;
-  const wi=parseInt(document.getElementById('ap-week')?.value)||0;
-  const date=(document.getElementById('ap-date')?.value||'').trim();
+  if(!mcalSelected){alert('Please pick a date on the calendar.');return;}
+  const dateStr=mcalSelected;
   const d=currentTabData;
   if(!d.weeks)d.weeks=[{label:'Week 1',tasks:[]},{label:'Week 2',tasks:[]},{label:'Week 3',tasks:[]},{label:'Week 4',tasks:[]}];
+  // Auto-assign to week based on day-of-month
+  const day=parseInt(dateStr.split('-')[2]);
+  const wi=day<=7?0:day<=14?1:day<=21?2:day<=28?3:4;
   if(!d.weeks[wi])d.weeks[wi]={label:`Week ${wi+1}`,tasks:[]};
-  d.weeks[wi].tasks.push({status:'',text:title,date,points:1});
+  d.weeks[wi].tasks.push({status:'',text:title,date:dateStr,points:1});
+  mcalSelected=null;
   saveDelivery(d);
 }
 function addWebTask(){
   const title=(document.getElementById('aw-title')?.value||'').trim();
   if(!title)return;
-  const date=(document.getElementById('aw-date')?.value||'').trim();
+  const date=mcalTarget==='web'?mcalSelected||'':'';
   const pts=_addPts['aw']||1;
   const d=currentTabData;
   if(!d.website)d.website=[];
   d.website.push({status:'',text:title,date,points:pts});
   _addPts['aw']=1;
+  if(mcalTarget==='web') mcalSelected=null;
   saveDelivery(d);
 }
 function addBrandTask(){
   const title=(document.getElementById('ab-title')?.value||'').trim();
   if(!title)return;
-  const date=(document.getElementById('ab-date')?.value||'').trim();
+  const date=mcalTarget==='brand'?mcalSelected||'':'';
   const pts=_addPts['ab']||1;
   const d=currentTabData;
   if(!d.brand)d.brand=[];
@@ -1248,12 +1282,11 @@ function renderDelivery(d){
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${weeks}</div>
     <div style="border-top:0.5px solid var(--border);margin-top:10px;padding-top:6px">
       <div class="add-task-trigger" onclick="toggleAddForm('add-post-form')"><i class="ti ti-plus"></i> Add post</div>
-      <div id="add-post-form" style="display:none">
-        <div class="add-task-row">
-          <select id="ap-week" style="font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">${weekOpts}</select>
-          <input id="ap-title" type="text" placeholder="Post title…" style="flex:1;min-width:140px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
-          <input id="ap-date" type="text" placeholder="Date e.g. 28 Jul" style="width:90px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
-          <button class="at-btn" onclick="addPost()">Add</button>
+      <div id="add-post-form" style="display:none;padding:6px 0 4px">
+        <input id="ap-title" type="text" placeholder="Post title…" style="width:100%;box-sizing:border-box;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:6px 9px;background:var(--bg-secondary);color:var(--text-primary);margin-bottom:2px">
+        ${buildMiniCalHTML('post')}
+        <div class="add-task-row" style="margin-top:6px">
+          <button class="at-btn" onclick="addPost()">Add post</button>
           <span class="at-cancel" onclick="toggleAddForm('add-post-form')">Cancel</span>
         </div>
       </div>
@@ -1264,10 +1297,10 @@ function renderDelivery(d){
     ${website||'<div class="no-data" style="margin-bottom:4px">No website tasks yet.</div>'}
     <div style="${website?'border-top:0.5px solid var(--border);margin-top:6px;padding-top:6px':''}">
       <div class="add-task-trigger" onclick="toggleAddForm('add-web-form')"><i class="ti ti-plus"></i> Add website task</div>
-      <div id="add-web-form" style="display:none">
-        <div class="add-task-row">
-          <input id="aw-title" type="text" placeholder="Task title…" style="flex:1;min-width:140px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
-          <input id="aw-date" type="text" placeholder="Due date (optional)" style="width:110px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
+      <div id="add-web-form" style="display:none;padding:6px 0 4px">
+        <input id="aw-title" type="text" placeholder="Task title…" style="width:100%;box-sizing:border-box;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:6px 9px;background:var(--bg-secondary);color:var(--text-primary);margin-bottom:2px">
+        ${buildMiniCalHTML('web')}
+        <div class="add-task-row" style="margin-top:6px">
           <span style="font-size:11px;color:var(--text-tertiary)">Importance:</span>
           ${addPips('aw')}
           <button class="at-btn" onclick="addWebTask()">Add</button>
@@ -1281,10 +1314,10 @@ function renderDelivery(d){
     ${brand||'<div class="no-data" style="margin-bottom:4px">No brand tasks yet.</div>'}
     <div style="${brand?'border-top:0.5px solid var(--border);margin-top:6px;padding-top:6px':''}">
       <div class="add-task-trigger" onclick="toggleAddForm('add-brd-form')"><i class="ti ti-plus"></i> Add brand task</div>
-      <div id="add-brd-form" style="display:none">
-        <div class="add-task-row">
-          <input id="ab-title" type="text" placeholder="Task title…" style="flex:1;min-width:140px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
-          <input id="ab-date" type="text" placeholder="Due date (optional)" style="width:110px;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:5px 8px;background:var(--bg-secondary);color:var(--text-primary)">
+      <div id="add-brd-form" style="display:none;padding:6px 0 4px">
+        <input id="ab-title" type="text" placeholder="Task title…" style="width:100%;box-sizing:border-box;font-size:11px;border:0.5px solid var(--border-md);border-radius:6px;padding:6px 9px;background:var(--bg-secondary);color:var(--text-primary);margin-bottom:2px">
+        ${buildMiniCalHTML('brand')}
+        <div class="add-task-row" style="margin-top:6px">
           <span style="font-size:11px;color:var(--text-tertiary)">Importance:</span>
           ${addPips('ab')}
           <button class="at-btn" onclick="addBrandTask()">Add</button>
@@ -2249,6 +2282,79 @@ async function fetchDeliveryCalEvents(){
     calEvents=events||[];
     updateCalendar();
   }catch(e){}
+}
+
+// ── Mini calendar date picker ──────────────────────────────────────────────────────────
+
+let mcalYear = new Date().getFullYear();
+let mcalMonth = new Date().getMonth();
+let mcalSelected = null; // YYYY-MM-DD
+let mcalTarget = null;   // 'post' | 'web' | 'brand'
+
+function buildMiniCalHTML(targetId){
+  const monthStr = `${mcalYear}-${String(mcalMonth+1).padStart(2,'0')}`;
+  const firstDay = new Date(mcalYear, mcalMonth, 1);
+  const daysInMonth = new Date(mcalYear, mcalMonth+1, 0).getDate();
+  const startDow = (firstDay.getDay()+6)%7;
+  const todayStr = new Date().toISOString().substring(0,10);
+  const existingDates = new Set(calEvents.filter(e=>e.date&&e.date.startsWith(monthStr)).map(e=>e.date));
+
+  let cells = '';
+  const prevDays = new Date(mcalYear, mcalMonth, 0).getDate();
+  for(let i=0;i<startDow;i++){
+    const d=prevDays-startDow+1+i;
+    cells+=`<div class="mcal-day mcal-day--dim">${d}</div>`;
+  }
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=`${monthStr}-${String(d).padStart(2,'0')}`;
+    const isSel=ds===mcalSelected;
+    const isToday=ds===todayStr;
+    const hasEv=existingDates.has(ds);
+    let cls='mcal-day';
+    if(isSel) cls+=' mcal-day--sel';
+    else if(isToday) cls+=' mcal-day--today';
+    if(hasEv&&!isSel) cls+=' mcal-day--has';
+    cells+=`<div class="${cls}" onclick="selectMiniCalDay('${ds}','${targetId}')">${d}</div>`;
+  }
+  const total=startDow+daysInMonth;
+  const rem=(7-total%7)%7;
+  for(let i=1;i<=rem;i++) cells+=`<div class="mcal-day mcal-day--dim">${i}</div>`;
+
+  const label = mcalSelected ? new Date(mcalSelected+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : 'No date selected';
+  return `<div class="mcal-wrap" id="mcal-${targetId}">
+    <div class="mcal-nav">
+      <button class="mcal-nav-btn" onclick="shiftMiniCal(-1,'${targetId}')">&#8249;</button>
+      <div class="mcal-nav-title">${CAL_MONTH_NAMES[mcalMonth]} ${mcalYear}</div>
+      <button class="mcal-nav-btn" onclick="shiftMiniCal(1,'${targetId}')">&#8250;</button>
+    </div>
+    <div class="mcal-grid">
+      ${CAL_DOW.map(d=>`<div class="mcal-dow">${d}</div>`).join('')}
+      ${cells}
+    </div>
+    <div class="mcal-selected-label" id="mcal-label-${targetId}">${mcalSelected?'<i class="ti ti-check" style="margin-right:3px"></i>'+esc(label):'Pick a date above'}</div>
+  </div>`;
+}
+
+function selectMiniCalDay(dateStr, targetId){
+  mcalSelected = dateStr;
+  mcalTarget = targetId;
+  const el = document.getElementById(`mcal-${targetId}`);
+  if(el) el.outerHTML = buildMiniCalHTML(targetId);
+}
+
+function shiftMiniCal(delta, targetId){
+  mcalMonth += delta;
+  if(mcalMonth>11){mcalMonth=0;mcalYear++;}
+  if(mcalMonth<0){mcalMonth=11;mcalYear--;}
+  const el = document.getElementById(`mcal-${targetId}`);
+  if(el) el.outerHTML = buildMiniCalHTML(targetId);
+}
+
+function openMiniCal(targetId){
+  mcalSelected = null;
+  mcalYear = new Date().getFullYear();
+  mcalMonth = new Date().getMonth();
+  mcalTarget = targetId;
 }
 
 // ── Calendar day modal ─────────────────────────────────────────────────────────────────

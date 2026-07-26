@@ -846,6 +846,7 @@ function saveDelivery(d){
   updateDeliveryScoreBadges(d);
   pushCascade(d);
   document.getElementById('page-content').innerHTML=renderTab('delivery',d);
+  fetchDeliveryCalEvents();
 }
 function addPost(){
   const title=(document.getElementById('ap-title')?.value||'').trim();

@@ -344,6 +344,12 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
 .arch-empty{font-size:11px;color:var(--text-tertiary);font-style:italic;padding:4px 0}
 .arch-no-months{padding:30px 20px;text-align:center;color:var(--text-tertiary);font-size:12px}
 
+/* Framework tab */
+.fw-stage-hdr{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:var(--radius-md);margin-bottom:8px;cursor:pointer;transition:filter .12s}
+.fw-stage-hdr:hover{filter:brightness(.97)}
+.fw-phase-label{font-size:10px;font-weight:600;color:var(--text-secondary);margin:10px 0 5px;display:flex;align-items:center;gap:6px}
+.fw-step-num{font-size:9px;font-weight:700;color:var(--text-tertiary);background:var(--bg-tertiary);padding:1px 5px;border-radius:3px;flex-shrink:0}
+
 /* Chat floating button */
 .chat-fab{position:fixed;bottom:22px;right:22px;width:46px;height:46px;border-radius:50%;background:#1a1a18;color:#fff;border:none;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.22);z-index:900;transition:background .15s,transform .12s}
 .chat-fab:hover{background:#333330;transform:scale(1.06)}
@@ -421,10 +427,10 @@ textarea.fi{resize:vertical;min-height:65px;line-height:1.5}
   <div class="tabs">
     <div class="tab on" data-tab="overview"><i class="ti ti-layout-dashboard"></i>Overview</div>
     <div class="tab" data-tab="strategy"><i class="ti ti-target"></i>Strategy</div>
-    <div class="tab" data-tab="sprints"><i class="ti ti-timeline"></i>Sprints</div>
     <div class="tab" data-tab="delivery"><i class="ti ti-checks"></i>Delivery</div>
     <div class="tab" data-tab="progress"><i class="ti ti-chart-bar"></i>Progress</div>
     <div class="tab" data-tab="brand"><i class="ti ti-shield-check"></i>Brand</div>
+    <div class="tab" data-tab="framework"><i class="ti ti-map-2"></i>Framework</div>
     <div class="tab-spacer"></div>
     <button class="upload-btn" id="report-btn" onclick="generateReport()" style="border-color:#B5D4C4;background:#E6F3EC;color:#27500A"><i class="ti ti-file-analytics"></i>Create Report</button>
     <button class="upload-btn" id="upload-btn" onclick="openUpload()"><i class="ti ti-upload"></i>Upload PDF</button>
@@ -991,10 +997,11 @@ async function loadClient(key){
   const fab=document.getElementById('chat-fab');
   if(fab) fab.style.display='flex';
   await loadTab('overview');
-  // Load delivery scores, document cycles, and calendar events in background
+  // Load delivery scores, document cycles, calendar events, and framework banner in background
   refreshDeliveryScores();
   refreshDocumentCycles();
   fetchDeliveryCalEvents();
+  loadFrameworkBanner();
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────────────
@@ -1011,6 +1018,10 @@ async function loadTab(tab){
   page.innerHTML='<div class="loading">Loading…</div>';
   try{
     let data=await api(`/api/clients/${currentClient}/tabs/${tab}`);
+    // When loading strategy, also fetch sprints data for the strategic sprints section
+    if(tab==='strategy'){
+      try{const sp=await api(`/api/clients/${currentClient}/tabs/sprints`);data._sprints=sp.sprints||[];}catch(e){}
+    }
     // Auto-mark overdue tasks and update delivery scores when delivery tab loads
     if(tab==='delivery'){
       const {data:updated, changed}=autoMarkOverdue(data);
@@ -1025,9 +1036,11 @@ async function loadTab(tab){
     }
     currentTabData=data;
     page.innerHTML=renderTab(tab,data);
+    if(tab==='overview') loadFrameworkBanner();
   }catch(e){
     currentTabData={};
     page.innerHTML=renderTab(tab,{});
+    if(tab==='overview') loadFrameworkBanner();
   }
 }
 
@@ -1072,15 +1085,136 @@ function updateSidebarCycleWarning(summary){
   if(top)top.appendChild(dot);
 }
 
+// ── MGS Framework definition (52 steps, 24 phases, 4 stages) ──────────────────────────
+const MGS_FRAMEWORK=[
+  {id:'discover',label:'Discover',col:'#185FA5',bg:'#E6F1FB',text:'#0C447C',phases:[
+    {num:1,label:'Client Onboarding',steps:[
+      {id:1,label:'Onboarding briefing & platform access setup',purpose:'Establish the working relationship, tools access, and communication cadence.'},
+      {id:2,label:'Initial assets & documentation request',purpose:'Collect all existing brand, marketing, and business materials from the client.'},
+    ]},
+    {num:2,label:'Strategic Direction',steps:[
+      {id:3,label:'Commercial objective setting',purpose:'Define what commercial success looks like over the next 12 months.'},
+      {id:4,label:'12-month success definition',purpose:'Agree measurable targets that define a successful partnership.'},
+    ]},
+    {num:3,label:'Client Discovery Workshop',steps:[
+      {id:5,label:'Workshop — business overview & services',purpose:'Understand the business model, service offering, and commercial structure in detail.'},
+      {id:6,label:'Workshop — ideal client profile & key audiences',purpose:'Map target audiences, their needs, and how the business currently reaches them.'},
+      {id:7,label:'Workshop — current & desired perception',purpose:'Capture the perception gap: where the brand is now vs. where it needs to be.'},
+      {id:8,label:'Workshop — competitive & market context',purpose:'Understand the competitive landscape and identify positioning opportunities.'},
+      {id:9,label:'Workshop — communications opportunities',purpose:'Identify thought leadership, employer brand, and channel opportunities.'},
+    ]},
+    {num:4,label:'Desk Research & Audit',steps:[
+      {id:10,label:'Competitor landscape audit',purpose:'Research key competitors across digital channels to establish positioning benchmarks.'},
+      {id:11,label:'Social media channel audit',purpose:'Assess current social presence, content quality, engagement, and growth.'},
+      {id:12,label:'Website & SEO audit',purpose:'Evaluate the website for credibility, UX, compliance, and search visibility.'},
+    ]},
+    {num:5,label:'Digital Credibility Scorecard',steps:[
+      {id:13,label:'DCS — Brand assessment (5 criteria)',purpose:'Score visual identity, consistency, tone of voice, thought leadership, and culture.'},
+      {id:14,label:'DCS — Marketing & comms assessment (5 criteria)',purpose:'Score social presence, content quality, stakeholder messaging, reputation, and engagement.'},
+      {id:15,label:'DCS — Website & digital assessment (5 criteria)',purpose:'Score website design, compliance, UX, site speed, and SEO visibility.'},
+    ]},
+    {num:6,label:'Analysis & Synthesis',steps:[
+      {id:16,label:'Findings & insights synthesis',purpose:'Consolidate all discovery research into a structured findings document.'},
+      {id:17,label:'Perception gap analysis',purpose:'Define the gap between current and desired perception, and its commercial importance.'},
+      {id:18,label:'Initial audience & message mapping',purpose:'Draft the audience framework with needs, barriers, messages, channels, and priority.'},
+    ]},
+    {num:7,label:'Discovery Gate',steps:[
+      {id:19,label:'Discovery report — preparation, presentation & client sign-off',purpose:'Present all discovery findings to the client and obtain formal sign-off to proceed to Align.'},
+    ]},
+  ]},
+  {id:'align',label:'Align',col:'#085041',bg:'#E1F5EE',text:'#085041',phases:[
+    {num:8,label:'Brand Foundation',steps:[
+      {id:20,label:'Brand positioning statement',purpose:'Define the brand\'s strategic positioning: what it stands for, for whom, and why it matters.'},
+      {id:21,label:'Tone of voice definition',purpose:'Establish the brand voice: how it speaks, what language it uses, and what it avoids.'},
+      {id:22,label:'Brand identity brief & design direction',purpose:'Brief the creative team on visual identity requirements and design direction.'},
+      {id:23,label:'Brand guidelines documentation',purpose:'Compile approved guidelines covering all visual and verbal identity rules.'},
+    ]},
+    {num:9,label:'Audience & Messaging',steps:[
+      {id:24,label:'Audience framework — final',purpose:'Complete the audience framework: audiences, needs, desired perception, messages, channels, priority.'},
+      {id:25,label:'Messaging hierarchy by audience',purpose:'Define the message architecture — primary messages, proof points, and evidence per audience.'},
+      {id:26,label:'Content pillar definition',purpose:'Establish the core content pillars that will drive all content activity.'},
+    ]},
+    {num:10,label:'Channel Strategy',steps:[
+      {id:27,label:'Channel selection & rationale',purpose:'Select the right channels for each audience and define the role of each channel.'},
+      {id:28,label:'12-month content strategy',purpose:'Map content themes, formats, cadence, and series across the full partnership year.'},
+    ]},
+    {num:11,label:'Activity Planning',steps:[
+      {id:29,label:'90-day activity plan — Sprint 1',purpose:'Plan the first quarterly sprint in detail: activity, objectives, audience, format, deadline, approval.'},
+      {id:30,label:'KPI framework & success measures',purpose:'Agree the metrics and benchmarks that will be used to measure success.'},
+      {id:31,label:'Dashboard structure setup & configuration',purpose:'Configure the client dashboard with all data fields, tracking, and baseline data in place.'},
+    ]},
+    {num:12,label:'Align Gate',steps:[
+      {id:32,label:'Align presentation & client review',purpose:'Present the full strategic alignment document to the client for review and discussion.'},
+      {id:33,label:'Client sign-off — Align Gate passed',purpose:'Obtain formal client approval on all strategic outputs before beginning Execute.'},
+    ]},
+  ]},
+  {id:'execute',label:'Execute',col:'#27500A',bg:'#EAF3DE',text:'#27500A',phases:[
+    {num:13,label:'Sprint Planning',steps:[
+      {id:34,label:'Monthly activity planning — content calendar',purpose:'Plan all content and activity for the coming month against the strategic sprint plan.'},
+    ]},
+    {num:14,label:'Content Production',steps:[
+      {id:35,label:'Content creation',purpose:'Produce all content for the month: copy, visuals, videos, articles, and assets.'},
+      {id:36,label:'Internal review & quality check',purpose:'Review all content against brand, strategy, audience, message, tone, accuracy, and quality criteria.'},
+    ]},
+    {num:15,label:'Client Approval',steps:[
+      {id:37,label:'Client content review',purpose:'Share content with the client for review and approval before scheduling.'},
+      {id:38,label:'Revisions & final approval',purpose:'Incorporate client feedback and obtain final sign-off on all content.'},
+    ]},
+    {num:16,label:'Publishing',steps:[
+      {id:39,label:'Content scheduling & publishing',purpose:'Schedule and publish all approved content across agreed channels on agreed dates.'},
+    ]},
+    {num:17,label:'Additional Deliverables',steps:[
+      {id:40,label:'Website task delivery',purpose:'Complete and deliver all website tasks for the sprint.'},
+      {id:41,label:'Brand asset delivery',purpose:'Produce and deliver all brand assets required for the sprint.'},
+    ]},
+    {num:18,label:'Monitoring',steps:[
+      {id:42,label:'Real-time monitoring & community management',purpose:'Monitor all channels for performance, engagement, comments, and community interactions.'},
+    ]},
+    {num:19,label:'Sprint Close',steps:[
+      {id:43,label:'Sprint close — record delivery & hand over to Improve',purpose:'Close the sprint, record what was delivered, and begin the Improve reporting cycle.'},
+    ]},
+  ]},
+  {id:'improve',label:'Improve',col:'#633806',bg:'#FAEEDA',text:'#633806',phases:[
+    {num:20,label:'Performance Recording',steps:[
+      {id:44,label:'Platform data collection — Planable report',purpose:'Collect and record all platform data from Planable for the reporting period.'},
+      {id:45,label:'Analytics recording — impressions, engagement, followers, reach',purpose:'Record all key metrics from all active platforms for the reporting period.'},
+    ]},
+    {num:21,label:'Client Reporting',steps:[
+      {id:46,label:'Monthly performance report preparation',purpose:'Compile the monthly client report covering delivery, performance, and insights.'},
+      {id:47,label:'Client reporting meeting',purpose:'Present monthly results to the client and discuss performance, learnings, and next steps.'},
+    ]},
+    {num:22,label:'Insights & Learning',steps:[
+      {id:48,label:'Insight capture — patterns, learnings, opportunities',purpose:'Record what performed strongly, weakly, and what the evidence suggests should change.'},
+      {id:49,label:'Strategic recommendations for next sprint',purpose:'Produce clear recommendations for the next sprint based on performance and learnings.'},
+    ]},
+    {num:23,label:'Brand Health Check',steps:[
+      {id:50,label:'DCS refresh — 6-month brand credibility review',purpose:'Re-run the Digital Credibility Scorecard every 6 months to measure brand progress.'},
+    ]},
+    {num:24,label:'Strategic Refresh',steps:[
+      {id:51,label:'Quarterly strategy review & sprint refresh',purpose:'Review the quarterly strategy in light of performance and update priorities for the next sprint.'},
+      {id:52,label:'Loop — return to Execute for next sprint',purpose:'Begin the next sprint cycle. For major strategic shifts, return to Discover or Align to rediscover/realign.'},
+    ]},
+  ]},
+];
+
+function fwCurrentStage(tasks){
+  let idx=0;
+  for(let i=0;i<MGS_FRAMEWORK.length;i++){
+    const allDone=MGS_FRAMEWORK[i].phases.flatMap(p=>p.steps).every(s=>tasks[s.id]==='complete');
+    if(allDone) idx=i+1; else break;
+  }
+  return Math.min(idx,MGS_FRAMEWORK.length-1);
+}
+
 // ── Renderers ───────────────────────────────────────────────────────────────────────────
 function renderTab(tab,d){
   switch(tab){
-    case 'overview': return renderOverview(d);
-    case 'strategy': return renderStrategy(d);
-    case 'sprints':  return renderSprints(d);
-    case 'delivery': return renderDelivery(d);
-    case 'progress': return renderProgress(d);
-    case 'brand':    return renderBrand(d);
+    case 'overview':   return renderOverview(d);
+    case 'strategy':   return renderStrategy(d);
+    case 'delivery':   return renderDelivery(d);
+    case 'progress':   return renderProgress(d);
+    case 'brand':      return renderBrand(d);
+    case 'framework':  return renderFramework(d);
     default: return '';
   }
 }
@@ -1118,7 +1252,8 @@ function renderOverview(d){
 
   const planableCycle=renderDocumentCycleStatus(currentCycles.planable_report,'Planable report');
   const contractCard=renderContractCard(d);
-  return `<div class="g4">${stats}</div>
+  return `<div id="fw-banner"></div>
+  <div class="g4">${stats}</div>
     <div class="g21">
       <div class="card">
         <div class="ct">${esc(summary.title||'Monthly summary')}</div>
@@ -1169,10 +1304,37 @@ function renderStrategy(d){
 
   const strategyCycle=renderDocumentCycleStatus(currentCycles.strategy,'Quarterly strategy');
   const meetingCard=renderMeetingCard(d);
+
+  // Strategic Sprints subsection (data from d._sprints)
+  const sprintsData=d._sprints||[];
+  const sprintCards=sprintsData.length?sprintsData.map(s=>{
+    const tasks=(s.tasks||[]).map(t=>`<div class="trow" style="padding:5px 0">
+      <div class="${ckClass(t.done?'done':t.status)}"></div>
+      <span class="tn ${t.done?'done':''}">${esc(t.text)}</span>
+    </div>`).join('');
+    return `<div style="border:0.5px solid ${s.border_col||'rgba(0,0,0,0.1)'};border-radius:var(--radius-md);padding:12px;flex:1;min-width:200px${s.faded?';opacity:.6':''}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div><div style="font-size:12px;font-weight:600">${esc(s.title)}</div><div style="font-size:10px;color:var(--text-tertiary);margin-top:1px">${esc(s.period||'')}</div></div>
+        <span style="font-size:10px;padding:2px 8px;border-radius:8px;background:${s.status_bg||'#F1EFE8'};color:${s.status_col||'#5F5E5A'};font-weight:500">${esc(s.status||'')}</span>
+      </div>
+      <div class="pbt" style="margin-bottom:8px"><div class="pbf" style="width:${s.bar_pct||0}%;background:${s.bar_col||'#9c9a92'}"></div></div>
+      ${s.body?`<div style="font-size:11px;color:var(--text-secondary);margin-bottom:${tasks?'8px':'0'}">${esc(s.body)}</div>`:''}
+      ${tasks||(!s.faded?'<div class="no-data">No tasks added yet.</div>':'')}
+    </div>`;
+  }).join(''):`<div class="no-data">No strategic sprints configured yet.</div>`;
+
+  const sprintsSection=`<div style="margin-top:12px">
+    <div class="ct" style="margin-bottom:10px">Strategic sprints <span style="font-size:10px;font-weight:400;color:var(--text-tertiary);margin-left:6px">Quarterly cycles — sub-deliverables of the 12-month strategy</span></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">${sprintCards}</div>
+  </div>`;
+
   return `${strategyCycle?`<div style="padding:0 0 6px">${strategyCycle}</div>`:''}
   ${meetingCard?`<div style="margin-bottom:10px">${meetingCard}</div>`:''}
   <div class="g12">
-    <div class="card"><div class="ct">Strategic hierarchy</div>${hier}</div>
+    <div class="card">
+      <div class="ct">Strategic hierarchy</div>${hier}
+      ${sprintsSection}
+    </div>
     <div>
       <div class="card" style="margin-bottom:10px"><div class="ct">Five strategic workstreams</div>${ws}</div>
       <div class="card"><div class="ct">Perception targets</div>${percs}</div>
@@ -1472,8 +1634,137 @@ function renderBrand(d){
   </div>`;
 }
 
+function renderFramework(d){
+  const tasks=d.tasks||{};
+  const totalSteps=MGS_FRAMEWORK.reduce((a,st)=>a+st.phases.reduce((b,ph)=>b+ph.steps.length,0),0);
+  const doneSteps=Object.values(tasks).filter(v=>v==='complete').length;
+  const pct=totalSteps?Math.round(doneSteps/totalSteps*100):0;
+  const stageIdx=fwCurrentStage(tasks);
+  const curStage=MGS_FRAMEWORK[stageIdx];
+
+  const stageBlocks=MGS_FRAMEWORK.map((stage,si)=>{
+    const stageSteps=stage.phases.flatMap(p=>p.steps);
+    const stageDone=stageSteps.filter(s=>tasks[s.id]==='complete').length;
+    const stagePct=stageSteps.length?Math.round(stageDone/stageSteps.length*100):0;
+    const isActive=si===stageIdx;
+
+    const phaseRows=stage.phases.map(ph=>{
+      const steps=ph.steps.map(step=>{
+        const done=tasks[step.id]==='complete';
+        return `<div class="trow-wrap">
+          <div class="trow">
+            <div class="fw-step-num">${step.id}</div>
+            <div class="${done?'ck done':'ck'}" onclick="toggleFrameworkTask(${step.id})" title="${done?'Mark incomplete':'Mark complete'}"></div>
+            <span class="tn${done?' done':''}" style="flex:1">${esc(step.label)}</span>
+            ${step.purpose?`<span class="tdesc-btn" onclick="toggleDesc('fwdesc-${step.id}')">Why</span>`:''}
+          </div>
+          ${step.purpose?`<div class="tdesc-panel" id="fwdesc-${step.id}">${esc(step.purpose)}</div>`:''}
+        </div>`;
+      }).join('');
+      return `<div class="fw-phase-label"><span>${ph.num}. ${esc(ph.label)}</span></div>${steps}`;
+    }).join('');
+
+    return `<div style="margin-bottom:10px">
+      <div class="fw-stage-hdr" style="background:${stage.bg}" onclick="toggleFwStage('fw-body-${stage.id}',this)">
+        <div style="width:28px;height:28px;border-radius:7px;background:${stage.col};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0">${si+1}</div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600;color:${stage.text}">${stage.label}</div>
+          <div style="font-size:10px;color:${stage.text};opacity:.7;margin-top:1px">${stageDone}/${stageSteps.length} steps · ${stagePct}%</div>
+        </div>
+        <div style="width:60px"><div class="pbt"><div class="pbf" style="width:${stagePct}%;background:${stage.col}"></div></div></div>
+        ${isActive?`<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;background:${stage.col};color:#fff">ACTIVE</span>`:''}
+        <i class="ti ti-chevron-down" style="font-size:13px;color:${stage.text};transition:transform .2s;flex-shrink:0"></i>
+      </div>
+      <div id="fw-body-${stage.id}" class="card" style="${isActive?'':'display:none'}padding:8px 12px;border-radius:0 0 var(--radius-md) var(--radius-md);border-top:none">
+        ${phaseRows}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-size:15px;font-weight:600">MGS Partnership Framework</div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px">52 steps · 24 phases · 4 stages</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="text-align:right">
+        <div style="font-size:18px;font-weight:700;color:${curStage.col}">${pct}%</div>
+        <div style="font-size:10px;color:var(--text-tertiary)">${doneSteps}/${totalSteps} complete</div>
+      </div>
+      <div style="width:80px"><div class="pbt" style="height:7px"><div class="pbf" style="width:${pct}%;background:${curStage.col}"></div></div></div>
+    </div>
+  </div>
+  ${stageBlocks}`;
+}
+
+function toggleFwStage(bodyId,hdr){
+  const body=document.getElementById(bodyId);
+  if(!body)return;
+  const open=body.style.display!=='none';
+  body.style.display=open?'none':'';
+  const chevron=hdr.querySelector('.ti-chevron-down');
+  if(chevron)chevron.style.transform=open?'':'rotate(180deg)';
+}
+
+async function toggleFrameworkTask(stepId){
+  if(!currentClient)return;
+  let fw={};
+  try{fw=await api(`/api/clients/${currentClient}/tabs/framework`);}catch(e){}
+  const tasks=fw.tasks||{};
+  tasks[stepId]=tasks[stepId]==='complete'?'':('complete');
+  try{
+    await api(`/api/clients/${currentClient}/tabs/framework`,'PUT',{tasks});
+    currentTabData={tasks};
+    document.getElementById('page-content').innerHTML=renderFramework({tasks});
+    updateSidebarPhase(tasks);
+  }catch(e){alert('Save failed: '+e.message);}
+}
+
+async function loadFrameworkBanner(){
+  const banner=document.getElementById('fw-banner');
+  if(!banner||!currentClient)return;
+  try{
+    const fw=await api(`/api/clients/${currentClient}/tabs/framework`);
+    const tasks=fw.tasks||{};
+    updateSidebarPhase(tasks);
+    const totalSteps=MGS_FRAMEWORK.reduce((a,st)=>a+st.phases.reduce((b,ph)=>b+ph.steps.length,0),0);
+    const doneSteps=Object.values(tasks).filter(v=>v==='complete').length;
+    const pct=totalSteps?Math.round(doneSteps/totalSteps*100):0;
+    const stageIdx=fwCurrentStage(tasks);
+    const stage=MGS_FRAMEWORK[stageIdx];
+    // find current phase
+    let curPhase=null;
+    for(const ph of stage.phases){
+      if(ph.steps.some(s=>tasks[s.id]!=='complete')){curPhase=ph;break;}
+    }
+    if(!curPhase)curPhase=stage.phases[stage.phases.length-1];
+    banner.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:var(--radius-md);background:${stage.bg};margin-bottom:12px;cursor:pointer" onclick="document.querySelector('[data-tab=framework]').click()">
+      <div style="width:32px;height:32px;border-radius:8px;background:${stage.col};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0">S${stageIdx+1}</div>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:600;color:${stage.text}">${stage.label} — ${curPhase.label}</div>
+        <div style="font-size:10px;color:${stage.text};opacity:.75;margin-top:1px">Framework progress: ${pct}% · ${doneSteps}/${totalSteps} steps complete</div>
+      </div>
+      <div style="width:80px"><div class="pbt"><div class="pbf" style="width:${pct}%;background:${stage.col}"></div></div></div>
+      <i class="ti ti-arrow-right" style="color:${stage.col};font-size:14px"></i>
+    </div>`;
+  }catch(e){}
+}
+
+function updateSidebarPhase(tasks){
+  if(!currentClient)return;
+  const stageIdx=fwCurrentStage(tasks);
+  const stage=MGS_FRAMEWORK[stageIdx];
+  let curPhase=null;
+  for(const ph of stage.phases){
+    if(ph.steps.some(s=>tasks[s.id]!=='complete')){curPhase=ph;break;}
+  }
+  if(!curPhase)curPhase=stage.phases[stage.phases.length-1];
+  const phEl=document.querySelector(`#cr-${currentClient} .cr-phase`);
+  if(phEl)phEl.textContent=`${stage.label} · ${curPhase.label}`;
+}
+
 // ── Edit modal ──────────────────────────────────────────────────────────────────────────
-const TAB_LABELS={overview:'Overview',strategy:'Strategy',sprints:'Sprints',delivery:'Delivery',progress:'Progress',brand:'Brand'};
+const TAB_LABELS={overview:'Overview',strategy:'Strategy',delivery:'Delivery',progress:'Progress',brand:'Brand',framework:'Framework'};
 
 function openEdit(){
   if(!currentClient)return;
@@ -1498,10 +1789,10 @@ function renderEditForm(tab,d){
   switch(tab){
     case 'overview':  return editOverview(d);
     case 'strategy':  return editStrategy(d);
-    case 'sprints':   return editSprints(d);
     case 'delivery':  return editDelivery(d);
     case 'progress':  return editProgress(d);
     case 'brand':     return editBrand(d);
+    case 'framework': return '<p style="color:var(--text-tertiary);font-size:12px">Framework steps are managed directly via the checklist — tick each step to mark it complete.</p>';
     default: return '<p style="color:var(--text-tertiary);font-size:12px">Nothing to edit here.</p>';
   }
 }
@@ -1761,7 +2052,6 @@ function readEditForm(tab){
   switch(tab){
     case 'overview': return readOverview();
     case 'strategy': return readStrategy();
-    case 'sprints':  return readSprints();
     case 'delivery': return readDelivery();
     case 'progress': return readProgress();
     case 'brand':    return readBrand();

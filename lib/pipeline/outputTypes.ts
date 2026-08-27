@@ -47,7 +47,15 @@ export interface CrossAnalysisOutput {
   unsupportedAmbitions?: { ambition: string; leadershipEvidence: string; supportingEvidenceElsewhere: string; strategicImplication: string }[];
   underusedEvidence?: { evidence: string; currentVisibility: string; opportunity: string }[];
   currentVsDesired?: { theme: string; current: string; desired: string; substance: string; gap: string; strategicImplication: string }[];
-  significanceClassification?: { insight: string; classification: string; reasoning: string }[];
+  significanceClassification?: {
+    insight: string;
+    evidenceStrength?: string;
+    commercialSignificance?: string;
+    perceptionSignificance?: string;
+    mgsRelevance?: string;
+    classification: string;
+    reasoning: string;
+  }[];
 }
 
 export interface StrategicFindingsOutput {
@@ -94,6 +102,7 @@ export interface QualityAuditOutput {
   contradictionAudit?: { pass: boolean; issues: { contradiction: string; concern: string }[] };
   genericnessAudit?: { pass: boolean; issues: { section: string; concern: string; suggestedFix: string }[] };
   referenceContaminationAudit?: { pass: boolean; issues: { concept: string; concern: string }[] };
+  weightingAudit?: { pass: boolean; issues: { item: string; concern: string; recommendation: string }[] };
 }
 
 export interface MarkdownOutput {

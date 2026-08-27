@@ -5,7 +5,8 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import type { Project } from "@/lib/types";
 import { discoveryCompleteness, isDiscoveryComplete } from "@/lib/discovery";
-import { StagePanel, JsonBlock } from "@/components/StagePanel";
+import { StagePanel, JsonBlock, LayerBadge } from "@/components/StagePanel";
+import { STAGE_ORDER, getStageMeta } from "@/lib/pipeline/stages";
 import SourceLibrary from "@/components/SourceLibrary";
 import ReviewGate from "@/components/ReviewGate";
 import type {
@@ -189,25 +190,17 @@ function OverviewTab({ project, setTab }: { project: Project; setTab: (t: Tab) =
       </section>
 
       <section>
-        <h3 className="font-medium mb-2">Pipeline Progress</h3>
+        <h3 className="font-medium mb-1">Pipeline Progress</h3>
+        <p className="text-xs text-neutral-500 mb-2 max-w-2xl">
+          The pipeline runs through three connected layers plus the human gate. Layer 1 is the internal reasoning
+          engine — useful, never the principal client output. Layer 2 (the Master Client Brand Direction &amp;
+          Strategy) is built from it. Layer 3 is its senior-leadership expression. All three carry the same
+          reasoning at different depths.
+        </p>
         <ol className="space-y-1 text-sm">
-          {(
-            [
-              "ingest",
-              "extract",
-              "independent_analysis",
-              "cross_analysis",
-              "strategic_findings",
-              "strategic_direction",
-              "strategic_pillars",
-              "roadmap",
-              "quality_audit",
-              "master_strategy",
-              "executive_brand_direction",
-              "human_review",
-            ] as const
-          ).map((id, i) => {
+          {STAGE_ORDER.map((id, i) => {
             const status = project.stages[id]?.status ?? "pending";
+            const meta = getStageMeta(id);
             return (
               <li key={id} className="flex items-center gap-2">
                 <span className="w-5 text-neutral-400">{i + 1}.</span>
@@ -222,7 +215,8 @@ function OverviewTab({ project, setTab }: { project: Project; setTab: (t: Tab) =
                       : "bg-neutral-300 dark:bg-neutral-700"
                   }`}
                 />
-                <span className={status === "complete" ? "" : "text-neutral-500"}>{id.replace(/_/g, " ")}</span>
+                <span className={status === "complete" ? "" : "text-neutral-500"}>{meta.name}</span>
+                <LayerBadge layer={meta.layer} />
               </li>
             );
           })}
@@ -454,11 +448,20 @@ function CrossAnalysisView({ output }: { output?: CrossAnalysisOutput }) {
       )}
       {output.significanceClassification && output.significanceClassification.length > 0 && (
         <Card title="Strategic Significance Classification">
-          <ul className="text-sm space-y-1">
+          <p className="text-xs text-neutral-500 mb-2">
+            Scored against the four weighting tests — evidence strength alone never earns &quot;critical&quot; on its own.
+          </p>
+          <ul className="text-sm space-y-2">
             {output.significanceClassification.map((s, i) => (
               <li key={i}>
                 <span className="uppercase text-xs font-medium mr-2">{s.classification}</span>
                 {s.insight}
+                {(s.evidenceStrength || s.commercialSignificance || s.perceptionSignificance || s.mgsRelevance) && (
+                  <div className="text-[11px] text-neutral-500 mt-0.5">
+                    evidence: {s.evidenceStrength ?? "—"} · commercial: {s.commercialSignificance ?? "—"} · perception:{" "}
+                    {s.perceptionSignificance ?? "—"} · MGS relevance: {s.mgsRelevance ?? "—"}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -609,6 +612,11 @@ function QualityAuditView({ output }: { output?: QualityAuditOutput }) {
       title: "Reference Contamination Audit",
       pass: output.referenceContaminationAudit?.pass,
       issues: output.referenceContaminationAudit?.issues,
+    },
+    {
+      title: "Weighting Audit",
+      pass: output.weightingAudit?.pass,
+      issues: output.weightingAudit?.issues,
     },
   ];
   return (

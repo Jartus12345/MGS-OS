@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Project, StageId, StageRecord } from "@/lib/types";
-import { getStageMeta } from "@/lib/pipeline/stages";
+import { getStageMeta, LAYER_LABEL, type StageLayer } from "@/lib/pipeline/stages";
 
 export function StagePanel({
   project,
@@ -45,7 +45,10 @@ export function StagePanel({
       <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 space-y-2">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h3 className="font-medium">{meta.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-medium">{meta.name}</h3>
+              <LayerBadge layer={meta.layer} />
+            </div>
             <p className="text-xs text-neutral-500 max-w-2xl">{meta.description}</p>
             <p className="text-[11px] text-neutral-400 mt-1">
               Canonical pipeline steps: {meta.canonicalSteps.join(" · ")}
@@ -96,6 +99,24 @@ function StatusBadge({ status }: { status?: string }) {
   return (
     <span className={`text-[11px] uppercase tracking-wide px-2 py-1 rounded ${map[label] ?? map.pending}`}>
       {label}
+    </span>
+  );
+}
+
+export function LayerBadge({ layer }: { layer: StageLayer }) {
+  const styles: Record<StageLayer, string> = {
+    1: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+    2: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+    3: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+    gate: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  };
+  const short: Record<StageLayer, string> = { 1: "Layer 1", 2: "Layer 2", 3: "Layer 3", gate: "Review Gate" };
+  return (
+    <span
+      title={LAYER_LABEL[layer]}
+      className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 ${styles[layer]}`}
+    >
+      {short[layer]}
     </span>
   );
 }

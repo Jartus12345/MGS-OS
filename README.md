@@ -9,6 +9,27 @@ The AI is not responsible for inventing the substance. The substance comes from 
 supplies. MGS remains responsible for final strategic judgement and client approval — see the
 Human Review Gate below.
 
+## The three-layer system (v1.1 correction)
+
+The PDMS validation run exposed a real failure mode: the pipeline was proving it could analyse
+evidence correctly and then stopping there, instead of using that analysis to make a commercially
+relevant strategic call. `lib/methodology/component9-weighting-and-layers.md` is the correction, and
+every stage from Strategic Diagnosis onward now runs against it. Two ideas anchor it:
+
+- **Evidence strength ≠ strategic significance.** A theme that recurs often in one source (typically
+  the Employee Survey) does not automatically deserve to define the strategy. Every candidate finding
+  is scored against four tests — evidence strength, commercial significance, perception significance,
+  MGS relevance — and leadership's Strategic Business Discovery sets the commercial destination that
+  employee and external evidence corroborate, qualify or challenge, not one that a frequent theme gets
+  to override.
+- **Three layers, one reasoning.** Layer 1 (Source Library → Independent Analysis → Cross-Analysis →
+  Quality Control, tagged `Layer 1` in the dashboard) is the internal reasoning engine — useful, never
+  the principal client output. Layer 2 (Strategic Diagnosis → Strategic Direction → Strategic Pillars →
+  Roadmap → the Master Client Strategy document, tagged `Layer 2`) is the strategic source of truth
+  built from Layer 1. Layer 3 (the Executive Brand Direction, tagged `Layer 3`) is its senior-leadership
+  expression. Layer 2 and Layer 3 read as professional strategic writing — they do not expose Layer 1's
+  internal tags (FACT / LEADERSHIP INTENT / evidence-strength labels) or dump its full register.
+
 ## The eight locked components
 
 The methodology is encoded, verbatim in spirit, as eight distinct components under `lib/methodology/`:
@@ -28,6 +49,9 @@ The methodology is encoded, verbatim in spirit, as eight distinct components und
    as a dependency-checked stage graph (`STAGES`) rather than prose.
 8. **MGS Human Review Gate v1.0** — `component8-review-gate.md` + `components/ReviewGate.tsx` — nothing
    is ever automatically labelled final.
+9. **MGS System Correction & Recalibration v1.1** — `component9-weighting-and-layers.md` — the
+   evidence-weighting and three-layer correction described above; injected into every stage from
+   Cross-Analysis onward.
 
 ## Architecture
 
@@ -80,7 +104,7 @@ before the Executive Brand Direction. The pipeline always terminates in
 | 6 | Strategic Direction | 12. STRATEGIC DIRECTION |
 | 7 | Strategic Pillars | 13. STRATEGIC PILLARS |
 | 8 | 12-Month Roadmap | 14. ROADMAP |
-| 9 | Quality Control Audits | 15. EVIDENCE AUDIT · 16. CONTRADICTION AUDIT · 17. GENERICNESS AUDIT · 18. REFERENCE CONTAMINATION AUDIT |
+| 9 | Quality Control Audits | 15. EVIDENCE AUDIT · 16. CONTRADICTION AUDIT · 17. GENERICNESS AUDIT · 18. REFERENCE CONTAMINATION AUDIT · WEIGHTING AUDIT |
 | 10 | Master Client Strategy | 19. WRITING PASS · 20. MASTER STRATEGY |
 | 11 | Executive Brand Direction | 21. EXECUTIVE BRAND DIRECTION |
 | 12 | MGS Human Review Gate | 22. HUMAN REVIEW |

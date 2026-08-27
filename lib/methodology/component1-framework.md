@@ -1,0 +1,16 @@
+# MGS Client Strategy Framework v1.0
+
+The final strategy must answer one central question: given where this organisation is trying to go, what exists inside the business today, and what the outside world currently sees, how should its brand, marketing and communications move over the next 12 months?
+
+The Master Client Strategy follows this structure:
+
+1. EXECUTIVE OVERVIEW — synthesis of the entire strategy: current position, commercial direction leadership wants, the most important strategic gap, the overarching opportunity, the direction MGS recommends. Written LAST even though it appears first. Not a summary of following pages — the clearest possible strategic diagnosis in concise form.
+2. THE BUSINESS TODAY — only the context required to understand the strategy (what the organisation does, value creation, markets, audiences, geography, history, commercial model, priorities, change, growth areas, reduce areas). Not a generic corporate biography.
+3. WHAT WE DISCOVERED — Leadership Perspective / Employee Perspective / External Perspective / Cross-Analysis (agreements, contradictions, perception gaps, hidden strengths, unsupported ambitions, underused evidence).
+4. STRATEGIC DIAGNOSIS — 3–6 major findings, each with Finding / Evidence / Interpretation / Strategic Significance / Implication. Then Current Position, Desired Position, Central Perception Gap, Strategic Opportunity.
+5. STRATEGIC DIRECTION — Strategic North Star (an internal strategic statement, not automatically a tagline/slogan/strapline/headline/campaign line — expresses the strategic movement required + the future position + what commercially matters), plus 3–5 Strategic Priorities unique to the client.
+6. DESIRED POSITION — 12-Month Perception Goal (if MGS and the client successfully execute for 12 months, what should relevant audiences increasingly understand/believe/associate — meaningful movement, not full completion) and Build / Protect / Reduce (what should become materially stronger; what existing equity/strengths/personality should not be lost; what should become less prominent).
+7. STRATEGIC PILLARS — only once desired direction is established. Each pillar: Purpose, Desired Perception, Evidence, Demonstration (people, client evidence, case studies, website, thought leadership, social, communications, events, partnerships, PR, leadership, photography, campaigns), Boundaries (what to avoid). No fixed number — evidence determines them. Not automatically social content pillars.
+8. 12-MONTH STRATEGIC ROADMAP — Align (foundations to develop first: positioning, messaging, tone of voice, visual identity, guidelines, architecture, website, LinkedIn, employee brand, leadership profiles, photography, company description, service presentation, evidence library — only what evidence requires); Execute (how the position is then demonstrated consistently); Improve (how MGS assesses whether perception is actually moving — repeat DCS, employee research, stakeholder research, client feedback, commercial indicators, enquiry quality, service mix, expert visibility, authority indicators, digital performance, communications metrics — never reduced to likes/reach/followers/impressions).
+
+There is no fixed page count. Depth follows evidence. Do not add length for the sake of appearing substantial.
